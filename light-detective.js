@@ -8,10 +8,13 @@
 // Game constants
 const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 800;
-const BALL_RADIUS = 15;
-const MIRROR_COUNT = 3;
+const BALL_RADIUS = 25;
+const MIRROR_COUNT = 1;
 const MIRROR_LENGTH = BALL_RADIUS * 10; // Fixed mirror length (5 times ball diameter)
 const MIRROR_THICKNESS = 4;
+const REFLECTIVE_THICKNESS = 6; // Thicker for the reflective side
+const NON_REFLECTIVE_THICKNESS = 3; // Thinner for the non-reflective side
+const MIRROR_WIDTH = 4; // Width of the mirror object (distance between blue and black sides)
 const EYE_SIZE = 40;
 const MAX_REFLECTIONS = 10; // Maximum number of reflections to prevent infinite loops
 const MIN_REFLECTION_SIZE_RATIO = 0.05; // Minimum size ratio to original ball (10%)
@@ -28,6 +31,7 @@ let showRayPaths = false; // Flag to toggle ray path visualization - default to 
 let isDragging = false;
 let draggedObject = null;
 let draggedMirrorPoint = null; // Which endpoint of a mirror is being dragged
+let draggedMirrorIndex = null; // Index of the mirror being dragged for middle dragging
 
 // This function runs when the page loads
 window.onload = function() {
@@ -36,6 +40,14 @@ window.onload = function() {
   if (toggleBtn) {
     toggleBtn.onclick = function() {
       showRayPaths = !showRayPaths; // Toggle the ray paths
+    };
+  }
+  
+  // Get the add mirror button and add a click event handler
+  const addMirrorBtn = document.getElementById('addMirror');
+  if (addMirrorBtn) {
+    addMirrorBtn.onclick = function() {
+      addNewMirror(); // Add a new mirror
     };
   }
 };
@@ -125,10 +137,47 @@ function initializeGame() {
       y2 = centerY;
     }
     
-    // Add mirror
+    // Calculate the mirror's normal vector (perpendicular to mirror, pointing to reflective side)
+    const mirrorVector = { 
+      x: x2 - x1, 
+      y: y2 - y1 
+    };
+    const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+    
+    // Get normalized normal vector (perpendicular to mirror)
+    const normal = {
+      x: -mirrorVector.y / mirrorLength,
+      y: mirrorVector.x / mirrorLength
+    };
+    
+    // Calculate the actual positions of both sides of the mirror
+    // Center line is between the blue and black sides
+    const halfWidth = MIRROR_WIDTH / 2;
+    
+    // Blue side coordinates
+    const blueX1 = x1 + normal.x * halfWidth;
+    const blueY1 = y1 + normal.y * halfWidth;
+    const blueX2 = x2 + normal.x * halfWidth;
+    const blueY2 = y2 + normal.y * halfWidth;
+    
+    // Black side coordinates
+    const blackX1 = x1 - normal.x * halfWidth;
+    const blackY1 = y1 - normal.y * halfWidth;
+    const blackX2 = x2 - normal.x * halfWidth;
+    const blackY2 = y2 - normal.y * halfWidth;
+    
+    // Add mirror with both sides' coordinates
     mirrors.push({
+      // Center line (for calculation purposes)
       x1, y1, x2, y2,
-      thickness: MIRROR_THICKNESS
+      // Blue reflective side
+      blueX1, blueY1, blueX2, blueY2,
+      // Black non-reflective side
+      blackX1, blackY1, blackX2, blackY2,
+      // Properties
+      thickness: MIRROR_THICKNESS,
+      normal: normal, // Normal vector points from black to blue side
+      width: MIRROR_WIDTH
     });
   }
   
@@ -137,14 +186,26 @@ function initializeGame() {
 }
 
 function drawMirrors() {
-  // Draw all mirrors as light blue lines
-  stroke(100, 200, 255);
-  strokeWeight(MIRROR_THICKNESS);
-  
   for (let mirror of mirrors) {
-    // Draw the line for the mirror
-    line(mirror.x1, mirror.y1, mirror.x2, mirror.y2);
-    //console.log(mirror.x1 + "," + mirror.y1 + " " + mirror.x2 + "," + mirror.y2);
+    // Draw black non-reflective side
+    stroke(0);
+    strokeWeight(NON_REFLECTIVE_THICKNESS);
+    line(
+      mirror.blackX1,
+      mirror.blackY1,
+      mirror.blackX2,
+      mirror.blackY2
+    );
+    
+    // Draw light blue reflective side
+    stroke(100, 200, 255);
+    strokeWeight(REFLECTIVE_THICKNESS);
+    line(
+      mirror.blueX1,
+      mirror.blueY1,
+      mirror.blueX2,
+      mirror.blueY2
+    );
   }
 }
 
@@ -160,6 +221,9 @@ function drawReflections() {
   noStroke();
   
   for (let reflection of reflections) {
+    // Check if this reflection is visible from current eye position
+    if (!isReflectionVisible(reflection)) continue;
+    
     // Choose color based on reflection depth (order)
     switch(reflection.depth) {
       case 1:
@@ -238,6 +302,9 @@ function drawRayPaths() {
 
 // Function to trace the ray path from the eye to the ball for a given reflection
 function traceRayPath(reflection) {
+  // Only trace paths for visible reflections
+  if (!isReflectionVisible(reflection)) return [];
+  
   let path = [{ x: eyePosition.x, y: eyePosition.y }];
   let current = reflection;
   
@@ -263,15 +330,18 @@ function traceRayPath(reflection) {
   } else if (current.parentReflection) {
     // For higher-order reflections, recursively get the parent path
     let parentPath = traceRayPath(current.parentReflection);
-    // Remove the eye from parent path to avoid duplicates
-    parentPath.shift();
-    // Add the parent path
-    path = path.concat(parentPath);
+    if (parentPath.length > 0) {
+      // Remove the eye from parent path to avoid duplicates
+      parentPath.shift();
+      // Add the parent path
+      path = path.concat(parentPath);
+    }
   }
   
   return path;
 }
 
+// Function to calculate reflections
 function calculateReflections() {
   // Clear previous reflections
   reflections = [];
@@ -279,24 +349,8 @@ function calculateReflections() {
   // For direct testing - generate reflections for all mirrors first
   // Make sure each mirror has a direct first-order reflection
   for (let mirror of mirrors) {
-    // Get mirror direction vector
-    const mirrorVector = { 
-      x: mirror.x2 - mirror.x1, 
-      y: mirror.y2 - mirror.y1 
-    };
-    const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
-    
-    // Get normalized mirror direction and normal
-    const mirrorDir = {
-      x: mirrorVector.x / mirrorLength,
-      y: mirrorVector.y / mirrorLength
-    };
-    
-    // Get mirror normal (perpendicular to mirror)
-    const mirrorNormal = {
-      x: -mirrorDir.y,
-      y: mirrorDir.x
-    };
+    // Use the stored normal vector for this mirror
+    const mirrorNormal = mirror.normal;
     
     // Calculate reflection of ball across mirror line
     // First find distance from ball to mirror along normal
@@ -305,6 +359,9 @@ function calculateReflections() {
       y: ball.y - mirror.y1
     };
     const normalDistance = dotProduct(ballToMirrorVec, mirrorNormal);
+    
+    // Only create reflections if ball is on the reflective side of the mirror (normal points toward ball)
+    if (normalDistance <= 0) continue;
     
     // Calculate distance from ball to mirror
     const distToMirror = Math.abs(normalDistance);
@@ -411,24 +468,8 @@ function calculateHigherOrderReflection(mirror, object, objectRadius, depth, vis
   // Don't calculate reflections that are too small
   if (objectRadius / BALL_RADIUS < MIN_REFLECTION_SIZE_RATIO) return;
   
-  // Get mirror direction vector
-  const mirrorVector = { 
-    x: mirror.x2 - mirror.x1, 
-    y: mirror.y2 - mirror.y1 
-  };
-  const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
-  
-  // Get normalized mirror direction and normal
-  const mirrorDir = {
-    x: mirrorVector.x / mirrorLength,
-    y: mirrorVector.y / mirrorLength
-  };
-  
-  // Get mirror normal (perpendicular to mirror)
-  const mirrorNormal = {
-    x: -mirrorDir.y,
-    y: mirrorDir.x
-  };
+  // Use the stored normal vector for this mirror
+  const mirrorNormal = mirror.normal;
   
   // Calculate reflection of object across mirror line
   // First find distance from object to mirror along normal
@@ -437,6 +478,9 @@ function calculateHigherOrderReflection(mirror, object, objectRadius, depth, vis
     y: object.y - mirror.y1
   };
   const normalDistance = dotProduct(objectToMirrorVec, mirrorNormal);
+  
+  // Only create reflections if object is on the reflective side of the mirror
+  if (normalDistance <= 0) return;
   
   // Calculate distance from object to mirror
   const distToMirror = Math.abs(normalDistance);
@@ -460,45 +504,15 @@ function calculateHigherOrderReflection(mirror, object, objectRadius, depth, vis
     parentReflection: object
   };
   
-  // Now check if the eye can see this virtual object through the mirror
-  // Line from eye to virtual object
-  const eyeToVirtualObject = {
-    start: {x: eyePosition.x, y: eyePosition.y},
-    end: {x: virtualObject.x, y: virtualObject.y}
-  };
+  // Add this higher-order reflection
+  reflections.push(virtualObject);
   
-  // Find intersection of this line with the mirror
-  const intersection = lineIntersection(
-    eyeToVirtualObject.start.x, eyeToVirtualObject.start.y,
-    eyeToVirtualObject.end.x, eyeToVirtualObject.end.y,
-    mirror.x1, mirror.y1,
-    mirror.x2, mirror.y2
-  );
-  
-  // If there's an intersection, check if the eye can actually see this point on the mirror
-  if (intersection) {
-    // Check that virtual object and eye are on opposite sides of the mirror
-    const intersectionToEye = {
-      x: eyePosition.x - intersection.x,
-      y: eyePosition.y - intersection.y
-    };
-    const intersectionToVirtual = {
-      x: virtualObject.x - intersection.x,
-      y: virtualObject.y - intersection.y
-    };
+  // Recursively calculate next level reflections
+  for (let otherMirror of visibleMirrors) {
+    // Skip the mirror that created this reflection
+    if (otherMirror === mirror) continue;
     
-    // Calculate dot product to see if they're pointing in opposite directions
-    const dotProd = dotProduct(intersectionToEye, intersectionToVirtual);
-    
-    // If dot product is negative, they're on opposite sides of the mirror (correct)
-    if (dotProd < 0) {
-      reflections.push(virtualObject);
-      for (let otherMirror of visibleMirrors) {
-        if (otherMirror === mirror) continue;
-        calculateHigherOrderReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1, visibleMirrors);
-      }
-      return;
-    }
+    calculateHigherOrderReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1, visibleMirrors);
   }
 }
 
@@ -627,23 +641,46 @@ function mousePressed() {
     return;
   }
   
-  // Check if clicked on a mirror endpoint
+  // Check if clicked on a mirror endpoint or middle
   for (let i = 0; i < mirrors.length; i++) {
     const mirror = mirrors[i];
     
-    // Check first endpoint
-    if (dist(mouseX, mouseY, mirror.x1, mirror.y1) < 10) {
+    // Check first endpoint of either side
+    if (dist(mouseX, mouseY, mirror.x1, mirror.y1) < 10 ||
+        dist(mouseX, mouseY, mirror.blueX1, mirror.blueY1) < 10 ||
+        dist(mouseX, mouseY, mirror.blackX1, mirror.blackY1) < 10) {
       isDragging = true;
       draggedObject = 'mirror';
       draggedMirrorPoint = {index: i, point: 1};
+      draggedMirrorIndex = null;
       return;
     }
     
-    // Check second endpoint
-    if (dist(mouseX, mouseY, mirror.x2, mirror.y2) < 10) {
+    // Check second endpoint of either side
+    if (dist(mouseX, mouseY, mirror.x2, mirror.y2) < 10 ||
+        dist(mouseX, mouseY, mirror.blueX2, mirror.blueY2) < 10 ||
+        dist(mouseX, mouseY, mirror.blackX2, mirror.blackY2) < 10) {
       isDragging = true;
       draggedObject = 'mirror';
       draggedMirrorPoint = {index: i, point: 2};
+      draggedMirrorIndex = null;
+      return;
+    }
+    
+    // Check if clicked on the middle of a mirror
+    // First calculate the midpoint
+    const midX = (mirror.x1 + mirror.x2) / 2;
+    const midY = (mirror.y1 + mirror.y2) / 2;
+    
+    // Check if clicked near the midpoint or along the line segment
+    if (dist(mouseX, mouseY, midX, midY) < 15 || 
+        isPointNearLineSegment(mouseX, mouseY, mirror.x1, mirror.y1, mirror.x2, mirror.y2, 10) ||
+        isPointNearLineSegment(mouseX, mouseY, mirror.blueX1, mirror.blueY1, mirror.blueX2, mirror.blueY2, 10) ||
+        isPointNearLineSegment(mouseX, mouseY, mirror.blackX1, mirror.blackY1, mirror.blackX2, mirror.blackY2, 10)) {
+      isDragging = true;
+      draggedObject = 'mirror';
+      draggedMirrorPoint = null;
+      draggedMirrorIndex = i;
       return;
     }
   }
@@ -654,6 +691,38 @@ function mousePressed() {
     draggedObject = 'eye';
     return;
   }
+}
+
+// Helper function to check if a point is near a line segment
+function isPointNearLineSegment(px, py, x1, y1, x2, y2, threshold) {
+  // Vector from line start to point
+  const dx = px - x1;
+  const dy = py - y1;
+  
+  // Vector representing the line
+  const lineVectorX = x2 - x1;
+  const lineVectorY = y2 - y1;
+  
+  // Calculate squared length of the line vector (to avoid sqrt)
+  const lineLengthSquared = lineVectorX * lineVectorX + lineVectorY * lineVectorY;
+  
+  // If the line is very short, treat it as a point
+  if (lineLengthSquared < 0.0001) {
+    return dist(px, py, x1, y1) < threshold;
+  }
+  
+  // Calculate dot product of (point - line start) and line vector
+  const dotProduct = dx * lineVectorX + dy * lineVectorY;
+  
+  // Calculate projection ratio (0 = at start point, 1 = at end point)
+  const projectionRatio = constrain(dotProduct / lineLengthSquared, 0, 1);
+  
+  // Find the closest point on the line segment
+  const closestX = x1 + projectionRatio * lineVectorX;
+  const closestY = y1 + projectionRatio * lineVectorY;
+  
+  // Check if the point is within the threshold distance
+  return dist(px, py, closestX, closestY) < threshold;
 }
 
 function mouseDragged() {
@@ -671,24 +740,104 @@ function mouseDragged() {
     // Recalculate reflections
     calculateReflections();
   } 
-  else if (draggedObject === 'mirror' && draggedMirrorPoint) {
-    // Get the mirror being dragged
-    const mirror = mirrors[draggedMirrorPoint.index];
-    
-    // Update the appropriate endpoint
-    if (draggedMirrorPoint.point === 1) {
-      mirror.x1 = mouseX;
-      mirror.y1 = mouseY;
-    } else {
-      mirror.x2 = mouseX;
-      mirror.y2 = mouseY;
+  else if (draggedObject === 'mirror') {
+    if (draggedMirrorPoint) {
+      // Get the mirror being dragged by endpoint
+      const mirror = mirrors[draggedMirrorPoint.index];
+      
+      // Update the appropriate endpoint of the center line
+      if (draggedMirrorPoint.point === 1) {
+        mirror.x1 = mouseX;
+        mirror.y1 = mouseY;
+      } else {
+        mirror.x2 = mouseX;
+        mirror.y2 = mouseY;
+      }
+      
+      // Keep endpoints within canvas bounds
+      mirror.x1 = constrain(mirror.x1, 0, width);
+      mirror.y1 = constrain(mirror.y1, 0, height);
+      mirror.x2 = constrain(mirror.x2, 0, width);
+      mirror.y2 = constrain(mirror.y2, 0, height);
+      
+      // Recalculate the mirror's normal vector
+      const mirrorVector = { 
+        x: mirror.x2 - mirror.x1, 
+        y: mirror.y2 - mirror.y1 
+      };
+      const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+      
+      // Get normalized normal vector
+      mirror.normal = {
+        x: -mirrorVector.y / mirrorLength,
+        y: mirrorVector.x / mirrorLength
+      };
+    }
+    else if (draggedMirrorIndex !== null) {
+      // Get the mirror being dragged from the middle
+      const mirror = mirrors[draggedMirrorIndex];
+      
+      // Calculate the displacement from last frame
+      const dx = mouseX - pmouseX;
+      const dy = mouseY - pmouseY;
+      
+      // Move both endpoints by the same amount to preserve orientation
+      mirror.x1 += dx;
+      mirror.y1 += dy;
+      mirror.x2 += dx;
+      mirror.y2 += dy;
+      
+      // Keep within canvas bounds
+      if (mirror.x1 < 0) {
+        mirror.x2 += (0 - mirror.x1);
+        mirror.x1 = 0;
+      } else if (mirror.x1 > width) {
+        mirror.x2 -= (mirror.x1 - width);
+        mirror.x1 = width;
+      }
+      
+      if (mirror.y1 < 0) {
+        mirror.y2 += (0 - mirror.y1);
+        mirror.y1 = 0;
+      } else if (mirror.y1 > height) {
+        mirror.y2 -= (mirror.y1 - height);
+        mirror.y1 = height;
+      }
+      
+      if (mirror.x2 < 0) {
+        mirror.x1 += (0 - mirror.x2);
+        mirror.x2 = 0;
+      } else if (mirror.x2 > width) {
+        mirror.x1 -= (mirror.x2 - width);
+        mirror.x2 = width;
+      }
+      
+      if (mirror.y2 < 0) {
+        mirror.y1 += (0 - mirror.y2);
+        mirror.y2 = 0;
+      } else if (mirror.y2 > height) {
+        mirror.y1 -= (mirror.y2 - height);
+        mirror.y2 = height;
+      }
     }
     
-    // Keep endpoints within canvas bounds
-    mirror.x1 = constrain(mirror.x1, 0, width);
-    mirror.y1 = constrain(mirror.y1, 0, height);
-    mirror.x2 = constrain(mirror.x2, 0, width);
-    mirror.y2 = constrain(mirror.y2, 0, height);
+    // For both endpoint and middle dragging, update the mirror sides
+    const mirror = draggedMirrorPoint ? mirrors[draggedMirrorPoint.index] : mirrors[draggedMirrorIndex];
+    
+    // Update both sides' coordinates
+    const halfWidth = mirror.width / 2;
+    
+    // Update blue side coordinates
+    mirror.blueX1 = mirror.x1 + mirror.normal.x * halfWidth;
+    mirror.blueY1 = mirror.y1 + mirror.normal.y * halfWidth;
+    mirror.blueX2 = mirror.x2 + mirror.normal.x * halfWidth;
+    mirror.blueY2 = mirror.y2 + mirror.normal.y * halfWidth;
+    
+    // Update black side coordinates
+    mirror.blackX1 = mirror.x1 - mirror.normal.x * halfWidth;
+    mirror.blackY1 = mirror.y1 - mirror.normal.y * halfWidth;
+    mirror.blackX2 = mirror.x2 - mirror.normal.x * halfWidth;
+    mirror.blackY2 = mirror.y2 - mirror.normal.y * halfWidth;
     
     // Recalculate reflections
     calculateReflections();
@@ -711,4 +860,134 @@ function mouseReleased() {
   isDragging = false;
   draggedObject = null;
   draggedMirrorPoint = null;
+  draggedMirrorIndex = null;
+}
+
+// Function to add a new mirror to the scene
+function addNewMirror() {
+  // Place in top right corner
+  const topRightX = width * 0.95;
+  const topRightY = height * 0.05;
+  
+  // Fixed horizontal orientation
+  const angle = 0; // Horizontal
+  
+  // Calculate endpoints
+  const x1 = topRightX - MIRROR_LENGTH / 2;
+  const y1 = topRightY;
+  const x2 = topRightX + MIRROR_LENGTH / 2;
+  const y2 = topRightY;
+  
+  // Calculate the mirror's normal vector (perpendicular to mirror)
+  const mirrorVector = { 
+    x: x2 - x1, 
+    y: y2 - y1 
+  };
+  const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+  
+  // Get normalized normal vector
+  const normal = {
+    x: -mirrorVector.y / mirrorLength,
+    y: mirrorVector.x / mirrorLength
+  };
+  
+  // Calculate the actual positions of both sides of the mirror
+  const halfWidth = MIRROR_WIDTH / 2;
+  
+  // Blue side coordinates
+  const blueX1 = x1 + normal.x * halfWidth;
+  const blueY1 = y1 + normal.y * halfWidth;
+  const blueX2 = x2 + normal.x * halfWidth;
+  const blueY2 = y2 + normal.y * halfWidth;
+  
+  // Black side coordinates
+  const blackX1 = x1 - normal.x * halfWidth;
+  const blackY1 = y1 - normal.y * halfWidth;
+  const blackX2 = x2 - normal.x * halfWidth;
+  const blackY2 = y2 - normal.y * halfWidth;
+  
+  // Add the new mirror to the mirrors array
+  mirrors.push({
+    // Center line (for calculation purposes)
+    x1, y1, x2, y2,
+    // Blue reflective side
+    blueX1, blueY1, blueX2, blueY2,
+    // Black non-reflective side
+    blackX1, blackY1, blackX2, blackY2,
+    // Properties
+    thickness: MIRROR_THICKNESS,
+    normal: normal,
+    width: MIRROR_WIDTH
+  });
+  
+  // Recalculate reflections with the new mirror
+  calculateReflections();
+}
+
+// Function to check if a reflection is visible from current eye position
+function isReflectionVisible(reflection) {
+  // Get the source mirror that created this reflection
+  const mirror = reflection.sourceMirror;
+  const mirrorNormal = mirror.normal;
+  
+  // Create a line from eye to reflection
+  const eye = eyePosition;
+  
+  // Find intersection of eye-to-reflection line with the mirror
+  const intersection = lineIntersection(
+    eye.x, eye.y,
+    reflection.x, reflection.y,
+    mirror.x1, mirror.y1,
+    mirror.x2, mirror.y2
+  );
+  
+  // If no intersection, the reflection is not visible
+  if (!intersection) return false;
+  
+  // Calculate vectors for the blue and black sides of the mirror
+  const blueVector = {
+    x: mirror.blueX1 - mirror.x1,
+    y: mirror.blueY1 - mirror.y1
+  };
+  
+  // Create a vector from mirror center line to intersection point
+  const toIntersection = {
+    x: intersection.x - mirror.x1,
+    y: intersection.y - mirror.y1
+  };
+  
+  // Calculate the direction from eye to intersection
+  const eyeToIntersection = {
+    x: intersection.x - eye.x,
+    y: intersection.y - eye.y
+  };
+  
+  // When dot product of normal and eyeToIntersection is negative,
+  // the eye is looking at the blue side of the mirror first
+  const lookingAtBlueSideFirst = dotProduct(mirrorNormal, eyeToIntersection) < 0;
+  
+  // Check if the ray passes through the mirror FIRST before reaching the reflection
+  // Calculate the distance from eye to intersection and from eye to reflection
+  const distToIntersection = Math.sqrt(
+    eyeToIntersection.x * eyeToIntersection.x + 
+    eyeToIntersection.y * eyeToIntersection.y
+  );
+  
+  const eyeToReflection = {
+    x: reflection.x - eye.x,
+    y: reflection.y - eye.y
+  };
+  
+  const distToReflection = Math.sqrt(
+    eyeToReflection.x * eyeToReflection.x + 
+    eyeToReflection.y * eyeToReflection.y
+  );
+  
+  // The ray should hit the mirror first, then the reflection
+  const intersectsBeforeReflection = distToIntersection < distToReflection;
+  
+  // For a reflection to be visible, the ray must:
+  // 1. Hit the blue side of the mirror first
+  // 2. Then reach the reflection
+  return lookingAtBlueSideFirst && intersectsBeforeReflection;
 } 
