@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Light Detective</title>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-	<script src="light-detective.js" defer></script>
+	<script src="light-detective.js"></script>
 	<style>
 		body {
 			margin: 0;
@@ -14,9 +14,16 @@
 			overflow: hidden;
 			background-color: #f5f5f5;
 			display: flex;
-			justify-content: center;
+			flex-direction: column;
+			justify-content: flex-start;
 			align-items: center;
 			height: 100vh;
+		}
+		.button-container {
+			width: 100%;
+			display: flex;
+			justify-content: center;
+			padding: 15px 0;
 		}
 		.game-container {
 			display: flex;
@@ -46,11 +53,25 @@
 			text-align: center;
 			font-size: 14px;
 		}
+		#generateBtn {
+			padding: 8px 20px;
+			background-color: #4CAF50;
+			color: white;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+			font-size: 16px;
+		}
+		#generateBtn:hover {
+			background-color: #45a049;
+		}
 	</style>
 </head>
 <body>
+	<div class="button-container">
+		<button id="generateBtn">Generate Reflections</button>
+	</div>
 	<div class="game-container">
-		<!-- p5.js will create and insert the canvas here -->
 	</div>
 </body>
 </html>
