@@ -139,11 +139,34 @@ function drawBall() {
 }
 
 function drawReflections() {
-  // Draw all reflections as green balls
-  fill(50, 200, 100, 200); // Semi-transparent green
+  // Draw all reflections as colored balls based on their reflection order
   noStroke();
   
   for (let reflection of reflections) {
+    // Choose color based on reflection depth (order)
+    switch(reflection.depth) {
+      case 1:
+        // First-order reflections - Green
+        fill(50, 200, 100, 200);
+        break;
+      case 2:
+        // Second-order reflections - Purple
+        fill(180, 100, 255, 200);
+        break;
+      case 3:
+        // Third-order reflections - Orange
+        fill(255, 150, 50, 200);
+        break;
+      case 4:
+        // Fourth-order reflections - Teal
+        fill(0, 200, 200, 200);
+        break;
+      default:
+        // Higher orders - Red
+        fill(255, 100, 100, 200);
+        break;
+    }
+    
     ellipse(reflection.x, reflection.y, reflection.radius * 2);
   }
 }
