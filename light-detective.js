@@ -417,36 +417,36 @@ function drawRayPaths() {
   
   // Color based on reflection depth/order
   switch (currentReflection.depth) {
-    case 1:
-      // First-order paths - Green
+      case 1:
+        // First-order paths - Green
       stroke(50, 200, 100, 220);
-      break;
-    case 2:
-      // Second-order paths - Purple
+        break;
+      case 2:
+        // Second-order paths - Purple
       stroke(180, 100, 255, 220);
-      break;
-    case 3:
-      // Third-order paths - Orange
+        break;
+      case 3:
+        // Third-order paths - Orange
       stroke(255, 150, 50, 220);
-      break;
-    case 4:
-      // Fourth-order paths - Teal
+        break;
+      case 4:
+        // Fourth-order paths - Teal
       stroke(0, 200, 200, 220);
-      break;
-    default:
-      // Higher orders - Red
+        break;
+      default:
+        // Higher orders - Red
       stroke(255, 100, 100, 220);
-      break;
-  }
-  
+        break;
+    }
+    
   // Draw the ray path
   strokeWeight(3);
-  noFill();
-  beginShape();
-  for (let pt of path) {
-    vertex(pt.x, pt.y);
-  }
-  endShape();
+    noFill();
+    beginShape();
+    for (let pt of path) {
+      vertex(pt.x, pt.y);
+    }
+    endShape();
   
   // Draw dots at each point on the path
   fill(255);
@@ -496,14 +496,14 @@ function traceSingleRayPath(reflection) {
     const mirror = currentReflection.sourceMirror;
     
     // First find the intersection with the mirror that created this reflection
-    const intersection = lineIntersection(
+  const intersection = lineIntersection(
       path[path.length - 1].x, path[path.length - 1].y, // From last point in path
       currentReflection.x, currentReflection.y,         // To this reflection 
-      mirror.x1, mirror.y1,
-      mirror.x2, mirror.y2
-    );
-    
-    if (intersection) {
+    mirror.x1, mirror.y1, 
+    mirror.x2, mirror.y2
+  );
+  
+  if (intersection) {
       // Add the intersection point with the mirror
       path.push(intersection);
     }
@@ -513,7 +513,7 @@ function traceSingleRayPath(reflection) {
     
     // If this is the last reflection in the chain, add the ball
     if (i === reflectionChain.length - 1) {
-      path.push({ x: ball.x, y: ball.y });
+    path.push({ x: ball.x, y: ball.y });
     }
   }
   
@@ -535,11 +535,16 @@ function isReflectionVisible(reflection) {
   const mirror = reflection.sourceMirror;
   const mirrorNormal = mirror.normal;
   
+  // Get the source object (either the original ball or the parent reflection)
+  const sourceObject = reflection.parentReflection || ball;
+  
+  // PART 1: Check if the eye can see the reflection through the mirror
+  
   // Create a line from eye to reflection
   const eye = eyePosition;
   
   // Find intersection of eye-to-reflection line with the mirror
-  const intersection = lineIntersection(
+  const eyeToMirrorIntersection = lineIntersection(
     eye.x, eye.y,
     reflection.x, reflection.y,
     mirror.x1, mirror.y1,
@@ -547,13 +552,12 @@ function isReflectionVisible(reflection) {
   );
   
   // If no intersection, the reflection is not visible
-  if (!intersection) return false;
+  if (!eyeToMirrorIntersection) return false;
   
-  // Check if the intersection point is within the mirror segment (should be true if lineIntersection returned a point)
-  // but we'll do an extra check for safety
+  // Check if the intersection point is within the mirror segment
   const mirrorLength = dist(mirror.x1, mirror.y1, mirror.x2, mirror.y2);
-  const dist1 = dist(intersection.x, intersection.y, mirror.x1, mirror.y1);
-  const dist2 = dist(intersection.x, intersection.y, mirror.x2, mirror.y2);
+  const dist1 = dist(eyeToMirrorIntersection.x, eyeToMirrorIntersection.y, mirror.x1, mirror.y1);
+  const dist2 = dist(eyeToMirrorIntersection.x, eyeToMirrorIntersection.y, mirror.x2, mirror.y2);
   
   // Allow for a small margin of error due to floating point
   const epsilon = 0.001;
@@ -563,8 +567,8 @@ function isReflectionVisible(reflection) {
   
   // Calculate the direction from eye to intersection
   const eyeToIntersection = {
-    x: intersection.x - eye.x,
-    y: intersection.y - eye.y
+    x: eyeToMirrorIntersection.x - eye.x,
+    y: eyeToMirrorIntersection.y - eye.y
   };
   
   // When dot product of normal and eyeToIntersection is negative,
@@ -596,7 +600,7 @@ function isReflectionVisible(reflection) {
   
   if (!intersectsBeforeReflection) return false;
   
-  // Next, check if the ray from eye to mirror intersection is blocked by any other mirror
+  // Check if there are any obstructions between eye and mirror intersection
   for (let otherMirror of mirrors) {
     // Skip the mirror we're testing for
     if (otherMirror === mirror) continue;
@@ -604,7 +608,7 @@ function isReflectionVisible(reflection) {
     // Check if the ray from eye to intersection crosses this other mirror
     const blockingIntersection = lineIntersection(
       eye.x, eye.y,
-      intersection.x, intersection.y,
+      eyeToMirrorIntersection.x, eyeToMirrorIntersection.y,
       otherMirror.x1, otherMirror.y1,
       otherMirror.x2, otherMirror.y2
     );
@@ -625,6 +629,73 @@ function isReflectionVisible(reflection) {
       // this means another mirror is blocking the view
       if (distToBlockingIntersection < distToIntersection * 0.99) { // Add a small margin for floating point errors
         return false;
+      }
+    }
+  }
+  
+  // PART 2: Check if the mirror can see the source object (ball or parent reflection)
+  
+  // For higher-order reflections (depth > 1), we need to check if the path is physically valid
+  if (reflection.depth > 1) {
+    // Calculate the reflection point on the mirror
+    const reflectionPoint = eyeToMirrorIntersection;
+    
+    // For reflections of reflections, the reflection should be visible from the mirror
+    // but only if the source of this reflection (parent) is also visible from the mirror
+    const parentReflection = reflection.parentReflection;
+    
+    // Check if there's a clear path from the parent reflection to the reflection point
+    for (let otherMirror of mirrors) {
+      // Skip the mirror we're testing for and the parent's mirror
+      if (otherMirror === mirror || (parentReflection && otherMirror === parentReflection.sourceMirror)) continue;
+      
+      // Check if any mirror blocks the path from parent reflection to reflection point
+      const blockingIntersection = lineIntersection(
+        parentReflection.x, parentReflection.y,
+        reflectionPoint.x, reflectionPoint.y,
+        otherMirror.x1, otherMirror.y1,
+        otherMirror.x2, otherMirror.y2
+      );
+      
+      if (blockingIntersection) {
+        // Calculate distances to determine if there's a blockage
+        const parentToBlockingDist = dist(parentReflection.x, parentReflection.y, blockingIntersection.x, blockingIntersection.y);
+        const parentToReflectionPointDist = dist(parentReflection.x, parentReflection.y, reflectionPoint.x, reflectionPoint.y);
+        
+        // If there's a mirror between the parent and the reflection point, this reflection isn't possible
+        if (parentToBlockingDist < parentToReflectionPointDist * 0.99) { // Small margin for floating point errors
+          return false;
+        }
+      }
+    }
+  } else {
+    // For first-order reflections, check if the original ball is visible from the mirror
+    
+    // Calculate the reflection point on the mirror
+    const reflectionPoint = eyeToMirrorIntersection;
+    
+    // Check if there's a clear path from the ball to the reflection point
+    for (let otherMirror of mirrors) {
+      // Skip the mirror we're testing for
+      if (otherMirror === mirror) continue;
+      
+      // Check if any mirror blocks the path from ball to reflection point
+      const blockingIntersection = lineIntersection(
+        ball.x, ball.y,
+        reflectionPoint.x, reflectionPoint.y,
+        otherMirror.x1, otherMirror.y1,
+        otherMirror.x2, otherMirror.y2
+      );
+      
+      if (blockingIntersection) {
+        // Calculate distances to determine if there's a blockage
+        const ballToBlockingDist = dist(ball.x, ball.y, blockingIntersection.x, blockingIntersection.y);
+        const ballToReflectionPointDist = dist(ball.x, ball.y, reflectionPoint.x, reflectionPoint.y);
+        
+        // If there's a mirror between the ball and the reflection point, the reflection isn't physically possible
+        if (ballToBlockingDist < ballToReflectionPointDist * 0.99) { // Small margin for floating point errors
+          return false;
+        }
       }
     }
   }
@@ -980,22 +1051,22 @@ function mouseDragged() {
   else if (draggedObject === 'mirror') {
     if (draggedMirrorPoint) {
       // Get the mirror being dragged by endpoint
-      const mirror = mirrors[draggedMirrorPoint.index];
-      
+    const mirror = mirrors[draggedMirrorPoint.index];
+    
       // Update the appropriate endpoint of the center line
-      if (draggedMirrorPoint.point === 1) {
-        mirror.x1 = mouseX;
-        mirror.y1 = mouseY;
-      } else {
-        mirror.x2 = mouseX;
-        mirror.y2 = mouseY;
-      }
-      
-      // Keep endpoints within canvas bounds
-      mirror.x1 = constrain(mirror.x1, 0, width);
-      mirror.y1 = constrain(mirror.y1, 0, height);
-      mirror.x2 = constrain(mirror.x2, 0, width);
-      mirror.y2 = constrain(mirror.y2, 0, height);
+    if (draggedMirrorPoint.point === 1) {
+      mirror.x1 = mouseX;
+      mirror.y1 = mouseY;
+    } else {
+      mirror.x2 = mouseX;
+      mirror.y2 = mouseY;
+    }
+    
+    // Keep endpoints within canvas bounds
+    mirror.x1 = constrain(mirror.x1, 0, width);
+    mirror.y1 = constrain(mirror.y1, 0, height);
+    mirror.x2 = constrain(mirror.x2, 0, width);
+    mirror.y2 = constrain(mirror.y2, 0, height);
       
       // Recalculate the mirror's normal vector
       const mirrorVector = { 
