@@ -161,13 +161,69 @@ function calculateReflections() {
   // Clear previous reflections
   reflections = [];
 
-  // For each mirror, check if it creates a reflection
+  // First check which mirrors are visible from the eye
+  const visibleMirrors = [];
+  
   for (let mirror of mirrors) {
-    calculateMirrorReflection(mirror, ball, ball.radius, 1);
+    // For a mirror to be visible, the eye must have a clear line of sight 
+    // to at least one point on the mirror
+    let mirrorVisible = false;
+    
+    // Check visibility to mirror endpoints and midpoint
+    const checkPoints = [
+      {x: mirror.x1, y: mirror.y1},
+      {x: mirror.x2, y: mirror.y2},
+      {x: (mirror.x1 + mirror.x2) / 2, y: (mirror.y1 + mirror.y2) / 2} // midpoint
+    ];
+    
+    for (let point of checkPoints) {
+      // Create a line from eye to this point on the mirror
+      const eyeToPoint = {
+        start: {x: eyePosition.x, y: eyePosition.y},
+        end: {x: point.x, y: point.y}
+      };
+      
+      // Check if this line intersects with any other mirror
+      let hasObstacle = false;
+      
+      for (let otherMirror of mirrors) {
+        // Skip checking against the mirror we're testing visibility for
+        if (otherMirror === mirror) continue;
+        
+        // Check if the line intersects this other mirror
+        const intersection = lineIntersection(
+          eyeToPoint.start.x, eyeToPoint.start.y,
+          eyeToPoint.end.x, eyeToPoint.end.y,
+          otherMirror.x1, otherMirror.y1,
+          otherMirror.x2, otherMirror.y2
+        );
+        
+        if (intersection) {
+          hasObstacle = true;
+          break;
+        }
+      }
+      
+      // If no obstacles, this part of the mirror is visible
+      if (!hasObstacle) {
+        mirrorVisible = true;
+        break;
+      }
+    }
+    
+    // If mirror is visible, add it to visible mirrors
+    if (mirrorVisible) {
+      visibleMirrors.push(mirror);
+    }
+  }
+  
+  // Now calculate reflections only for visible mirrors
+  for (let mirror of visibleMirrors) {
+    calculateMirrorReflection(mirror, ball, ball.radius, 1, visibleMirrors);
   }
 }
 
-function calculateMirrorReflection(mirror, object, objectRadius, depth) {
+function calculateMirrorReflection(mirror, object, objectRadius, depth, visibleMirrors) {
   // Don't go beyond max reflection depth
   if (depth > MAX_REFLECTIONS) return;
   
@@ -234,23 +290,63 @@ function calculateMirrorReflection(mirror, object, objectRadius, depth) {
     mirror.x2, mirror.y2
   );
   
-  // If there's an intersection, the eye can see the reflection
+  // If there's an intersection, check if the eye can actually see this point on the mirror
   if (intersection) {
-    // Add the reflection at the virtual object position
-    reflections.push({
-      x: virtualObject.x,
-      y: virtualObject.y,
-      radius: virtualObject.radius,
-      depth: depth
-    });
+    // Check that virtual object and eye are on opposite sides of the mirror
+    const intersectionToEye = {
+      x: eyePosition.x - intersection.x,
+      y: eyePosition.y - intersection.y
+    };
+    const intersectionToVirtual = {
+      x: virtualObject.x - intersection.x,
+      y: virtualObject.y - intersection.y
+    };
     
-    // Calculate reflections of this reflection in other mirrors
-    for (let otherMirror of mirrors) {
-      // Skip the mirror that created this reflection
-      if (otherMirror === mirror) continue;
+    // Calculate dot product to see if they're pointing in opposite directions
+    const dotProd = dotProduct(intersectionToEye, intersectionToVirtual);
+    
+    // If dot product is negative, they're on opposite sides of the mirror (correct)
+    if (dotProd < 0) {
+      // One last check: Make sure no other mirror is blocking the view from eye to intersection
+      let hasObstacle = false;
       
-      // Calculate reflection of this reflection in the other mirror
-      calculateMirrorReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1);
+      for (let otherMirror of mirrors) {
+        // Skip the mirror we're reflecting in
+        if (otherMirror === mirror) continue;
+        
+        // Check if the line from eye to intersection point intersects any other mirror
+        const blockingIntersection = lineIntersection(
+          eyePosition.x, eyePosition.y,
+          intersection.x, intersection.y,
+          otherMirror.x1, otherMirror.y1,
+          otherMirror.x2, otherMirror.y2
+        );
+        
+        if (blockingIntersection) {
+          hasObstacle = true;
+          break;
+        }
+      }
+      
+      // Only show reflection if nothing is blocking the view
+      if (!hasObstacle) {
+        // Add the reflection at the virtual object position
+        reflections.push({
+          x: virtualObject.x,
+          y: virtualObject.y,
+          radius: virtualObject.radius,
+          depth: depth
+        });
+        
+        // Calculate reflections of this reflection in other mirrors
+        for (let otherMirror of visibleMirrors) {
+          // Skip the mirror that created this reflection
+          if (otherMirror === mirror) continue;
+          
+          // Calculate reflection of this reflection in the other mirror
+          calculateMirrorReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1, visibleMirrors);
+        }
+      }
     }
   }
 }
