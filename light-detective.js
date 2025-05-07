@@ -22,11 +22,23 @@ let mirrors = [];
 let eye;
 let eyePosition = {x: 0, y: 0}; // Will be set in setup
 let reflections = []; // Array to store calculated reflections
+let showRayPaths = false; // Flag to toggle ray path visualization - default to off
 
 // Dragging state
 let isDragging = false;
 let draggedObject = null;
 let draggedMirrorPoint = null; // Which endpoint of a mirror is being dragged
+
+// This function runs when the page loads
+window.onload = function() {
+  // Get the toggle button and add a click event handler
+  const toggleBtn = document.getElementById('toggleRay');
+  if (toggleBtn) {
+    toggleBtn.onclick = function() {
+      showRayPaths = !showRayPaths; // Toggle the ray paths
+    };
+  }
+};
 
 function setup() {
   // Create a fixed-size canvas
@@ -54,6 +66,11 @@ function draw() {
   
   // Draw all mirrors
   drawMirrors();
+  
+  // Draw ray paths if enabled
+  if (showRayPaths) {
+    drawRayPaths();
+  }
   
   // Draw all reflections (green balls)
   drawReflections();
@@ -180,10 +197,141 @@ function drawEye() {
   image(eye, eyeX, eyeY, EYE_SIZE, EYE_SIZE);
 }
 
+function drawRayPaths() {
+  for (let reflection of reflections) {
+    let path = traceRayPath(reflection);
+    if (path.length < 2) continue;
+    
+    // Color by order
+    switch (reflection.depth) {
+      case 1:
+        // First-order paths - Green
+        stroke(50, 200, 100, 120);
+        break;
+      case 2:
+        // Second-order paths - Purple
+        stroke(180, 100, 255, 120);
+        break;
+      case 3:
+        // Third-order paths - Orange
+        stroke(255, 150, 50, 120);
+        break;
+      case 4:
+        // Fourth-order paths - Teal
+        stroke(0, 200, 200, 120);
+        break;
+      default:
+        // Higher orders - Red
+        stroke(255, 100, 100, 120);
+        break;
+    }
+    
+    strokeWeight(2);
+    noFill();
+    beginShape();
+    for (let pt of path) {
+      vertex(pt.x, pt.y);
+    }
+    endShape();
+  }
+}
+
+// Function to trace the ray path from the eye to the ball for a given reflection
+function traceRayPath(reflection) {
+  let path = [{ x: eyePosition.x, y: eyePosition.y }];
+  let current = reflection;
+  
+  // Add the reflection point
+  path.push({ x: current.x, y: current.y });
+  
+  // Find intersection of line from eye to current reflection with the mirror
+  let mirror = current.sourceMirror;
+  const intersection = lineIntersection(
+    eyePosition.x, eyePosition.y, 
+    current.x, current.y,
+    mirror.x1, mirror.y1, 
+    mirror.x2, mirror.y2
+  );
+  
+  if (intersection) {
+    path.splice(1, 0, intersection); // Insert intersection between eye and reflection
+  }
+  
+  // For first-order reflections, add the original ball
+  if (current.depth === 1) {
+    path.push({ x: ball.x, y: ball.y });
+  } else if (current.parentReflection) {
+    // For higher-order reflections, recursively get the parent path
+    let parentPath = traceRayPath(current.parentReflection);
+    // Remove the eye from parent path to avoid duplicates
+    parentPath.shift();
+    // Add the parent path
+    path = path.concat(parentPath);
+  }
+  
+  return path;
+}
+
 function calculateReflections() {
   // Clear previous reflections
   reflections = [];
 
+  // For direct testing - generate reflections for all mirrors first
+  // Make sure each mirror has a direct first-order reflection
+  for (let mirror of mirrors) {
+    // Get mirror direction vector
+    const mirrorVector = { 
+      x: mirror.x2 - mirror.x1, 
+      y: mirror.y2 - mirror.y1 
+    };
+    const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+    
+    // Get normalized mirror direction and normal
+    const mirrorDir = {
+      x: mirrorVector.x / mirrorLength,
+      y: mirrorVector.y / mirrorLength
+    };
+    
+    // Get mirror normal (perpendicular to mirror)
+    const mirrorNormal = {
+      x: -mirrorDir.y,
+      y: mirrorDir.x
+    };
+    
+    // Calculate reflection of ball across mirror line
+    // First find distance from ball to mirror along normal
+    const ballToMirrorVec = {
+      x: ball.x - mirror.x1,
+      y: ball.y - mirror.y1
+    };
+    const normalDistance = dotProduct(ballToMirrorVec, mirrorNormal);
+    
+    // Calculate distance from ball to mirror
+    const distToMirror = Math.abs(normalDistance);
+    
+    // Calculate reflection size based on distance to mirror
+    // Further away = smaller reflection
+    const distanceFactor = 1 / (1 + distToMirror * 0.005);
+    const reflectionRadius = ball.radius * distanceFactor;
+    
+    // Don't show reflections that would be too small
+    if (reflectionRadius < BALL_RADIUS * MIN_REFLECTION_SIZE_RATIO) continue;
+    
+    // Reflection of ball position is on opposite side of mirror, same distance from mirror
+    const virtualBall = {
+      x: ball.x - 2 * normalDistance * mirrorNormal.x,
+      y: ball.y - 2 * normalDistance * mirrorNormal.y,
+      radius: reflectionRadius,
+      depth: 1,
+      sourceMirror: mirror,
+      parentReflection: null // First-order reflections don't have parent reflections
+    };
+    
+    // Add this first-order reflection
+    reflections.push(virtualBall);
+  }
+
+  // Then check for second-order reflections and higher
   // First check which mirrors are visible from the eye
   const visibleMirrors = [];
   
@@ -196,7 +344,9 @@ function calculateReflections() {
     const checkPoints = [
       {x: mirror.x1, y: mirror.y1},
       {x: mirror.x2, y: mirror.y2},
-      {x: (mirror.x1 + mirror.x2) / 2, y: (mirror.y1 + mirror.y2) / 2} // midpoint
+      {x: (mirror.x1 + mirror.x2) / 2, y: (mirror.y1 + mirror.y2) / 2}, // midpoint
+      {x: (mirror.x1 + mirror.x2) * 0.25 + mirror.x1, y: (mirror.y1 + mirror.y2) * 0.25 + mirror.y1}, // 1/4 point
+      {x: (mirror.x1 + mirror.x2) * 0.75 + mirror.x1, y: (mirror.y1 + mirror.y2) * 0.75 + mirror.y1}  // 3/4 point
     ];
     
     for (let point of checkPoints) {
@@ -240,13 +390,21 @@ function calculateReflections() {
     }
   }
   
-  // Now calculate reflections only for visible mirrors
-  for (let mirror of visibleMirrors) {
-    calculateMirrorReflection(mirror, ball, ball.radius, 1, visibleMirrors);
+  // Calculate higher-order reflections for each first-order reflection
+  const firstOrderReflections = [...reflections]; // Copy the array of first-order reflections
+  for (let reflection of firstOrderReflections) {
+    // Calculate reflection of this reflection in other mirrors
+    for (let otherMirror of visibleMirrors) {
+      // Skip the mirror that created this reflection
+      if (otherMirror === reflection.sourceMirror) continue;
+      
+      calculateHigherOrderReflection(otherMirror, reflection, reflection.radius, 2, visibleMirrors);
+    }
   }
 }
 
-function calculateMirrorReflection(mirror, object, objectRadius, depth, visibleMirrors) {
+// Calculate higher-order reflections (2nd order and above)
+function calculateHigherOrderReflection(mirror, object, objectRadius, depth, visibleMirrors) {
   // Don't go beyond max reflection depth
   if (depth > MAX_REFLECTIONS) return;
   
@@ -295,7 +453,11 @@ function calculateMirrorReflection(mirror, object, objectRadius, depth, visibleM
   const virtualObject = {
     x: object.x - 2 * normalDistance * mirrorNormal.x,
     y: object.y - 2 * normalDistance * mirrorNormal.y,
-    radius: reflectionRadius
+    radius: reflectionRadius,
+    depth: depth,
+    sourceMirror: mirror,
+    // For higher-order reflections, parent is the reflection that generated this one
+    parentReflection: object
   };
   
   // Now check if the eye can see this virtual object through the mirror
@@ -330,46 +492,12 @@ function calculateMirrorReflection(mirror, object, objectRadius, depth, visibleM
     
     // If dot product is negative, they're on opposite sides of the mirror (correct)
     if (dotProd < 0) {
-      // One last check: Make sure no other mirror is blocking the view from eye to intersection
-      let hasObstacle = false;
-      
-      for (let otherMirror of mirrors) {
-        // Skip the mirror we're reflecting in
+      reflections.push(virtualObject);
+      for (let otherMirror of visibleMirrors) {
         if (otherMirror === mirror) continue;
-        
-        // Check if the line from eye to intersection point intersects any other mirror
-        const blockingIntersection = lineIntersection(
-          eyePosition.x, eyePosition.y,
-          intersection.x, intersection.y,
-          otherMirror.x1, otherMirror.y1,
-          otherMirror.x2, otherMirror.y2
-        );
-        
-        if (blockingIntersection) {
-          hasObstacle = true;
-          break;
-        }
+        calculateHigherOrderReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1, visibleMirrors);
       }
-      
-      // Only show reflection if nothing is blocking the view
-      if (!hasObstacle) {
-        // Add the reflection at the virtual object position
-        reflections.push({
-          x: virtualObject.x,
-          y: virtualObject.y,
-          radius: virtualObject.radius,
-          depth: depth
-        });
-        
-        // Calculate reflections of this reflection in other mirrors
-        for (let otherMirror of visibleMirrors) {
-          // Skip the mirror that created this reflection
-          if (otherMirror === mirror) continue;
-          
-          // Calculate reflection of this reflection in the other mirror
-          calculateMirrorReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1, visibleMirrors);
-        }
-      }
+      return;
     }
   }
 }
@@ -479,6 +607,12 @@ function dotProduct(v1, v2) {
 function keyPressed() {
   if (key === 'r' || key === 'R') {
     initializeGame();
+    return false;
+  }
+  
+  // Toggle ray paths with 'p' key
+  if (key === 'p' || key === 'P') {
+    showRayPaths = !showRayPaths;
     return false;
   }
   
