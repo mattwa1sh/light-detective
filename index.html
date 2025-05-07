@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Light Detective</title>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+	<script src="light-detective.js" defer></script>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			font-family: Arial, sans-serif;
+			overflow: hidden;
+			background-color: #f5f5f5;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			height: 100vh;
+		}
+		.game-container {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: flex-start;
+		}
+		header {
+			text-align: center;
+			padding: 10px;
+			background-color: #333;
+			color: white;
+			width: 100%;
+			margin-bottom: 20px;
+		}
+		h1 {
+			margin: 0;
+			font-size: 24px;
+		}
+		canvas {
+			display: block;
+			border: 1px solid #ccc;
+			box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+		}
+		.instructions {
+			margin-top: 10px;
+			text-align: center;
+			font-size: 14px;
+		}
+	</style>
+</head>
+<body>
+	<div class="game-container">
+		<!-- p5.js will create and insert the canvas here -->
+	</div>
+</body>
+</html>
