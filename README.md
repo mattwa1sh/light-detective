@@ -50,8 +50,7 @@ Ray paths show how light travels from the eye, to mirrors, and to the ball:
 - **Cycle Rays**: Shows ray paths one at a time, cycling through all visible reflections
 - **Hide Rays**: Turns off all ray path visibility
 - **Add Mirror**: Adds a new mirror to the scene
-- **R key**: Resets the game with new random positions
-- **P key**: Alternative way to toggle ray paths
+- **Reset**: Randomizes the game with new positions for the ball and mirrors
 
 ## Development
 This game is built using:

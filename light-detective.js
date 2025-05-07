@@ -36,6 +36,98 @@ let draggedMirrorIndex = null; // Index of the mirror being dragged for middle d
 
 // This function runs when the page loads
 window.onload = function() {
+  console.log("Window loaded, starting initialization");
+  
+  // Initialize reset button immediately
+  const resetBtn = document.getElementById('resetGame');
+  if (resetBtn) {
+    console.log("Reset button found, setting up click handler");
+    resetBtn.onclick = function() {
+      console.log("Reset button clicked");
+      
+      // Create a ball at a random position
+      ball = {
+        x: random(BALL_RADIUS, width - BALL_RADIUS),
+        y: random(BALL_RADIUS, height * 0.7),  // Keep ball in upper 70% of screen
+        radius: BALL_RADIUS
+      };
+      console.log("New ball created at:", ball.x, ball.y);
+      
+      // Create random mirrors with fixed length
+      mirrors = [];
+      for (let i = 0; i < MIRROR_COUNT; i++) {
+        // Random position for first endpoint, with safety margin from edges
+        const safetyMargin = MIRROR_LENGTH / 2;
+        const x1 = random(safetyMargin, width - safetyMargin);
+        const y1 = random(safetyMargin, height * 0.8 - safetyMargin); // Keep mirrors in upper 80% of screen
+        
+        // Random angle
+        const angle = random(TWO_PI);
+        
+        // Calculate second endpoint with fixed length
+        let x2 = x1 + cos(angle) * MIRROR_LENGTH;
+        let y2 = y1 + sin(angle) * MIRROR_LENGTH;
+        
+        // Ensure endpoints are within canvas bounds
+        x2 = constrain(x2, 0, width);
+        y2 = constrain(y2, 0, height * 0.8);
+        
+        // Calculate the mirror's normal vector
+        const mirrorVector = { 
+          x: x2 - x1, 
+          y: y2 - y1 
+        };
+        const mirrorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+        
+        // Get normalized normal vector
+        const normal = {
+          x: -mirrorVector.y / mirrorLength,
+          y: mirrorVector.x / mirrorLength
+        };
+        
+        // Calculate the sides of the mirror
+        const halfWidth = MIRROR_WIDTH / 2;
+        
+        // Blue side coordinates
+        const blueX1 = x1 + normal.x * halfWidth;
+        const blueY1 = y1 + normal.y * halfWidth;
+        const blueX2 = x2 + normal.x * halfWidth;
+        const blueY2 = y2 + normal.y * halfWidth;
+        
+        // Black side coordinates
+        const blackX1 = x1 - normal.x * halfWidth;
+        const blackY1 = y1 - normal.y * halfWidth;
+        const blackX2 = x2 - normal.x * halfWidth;
+        const blackY2 = y2 - normal.y * halfWidth;
+        
+        // Add mirror
+        mirrors.push({
+          x1, y1, x2, y2,
+          blueX1, blueY1, blueX2, blueY2,
+          blackX1, blackY1, blackX2, blackY2,
+          thickness: MIRROR_THICKNESS,
+          normal: normal,
+          width: MIRROR_WIDTH
+        });
+      }
+      console.log("Created", mirrors.length, "mirrors");
+      
+      // Clear reflections
+      reflections = [];
+      
+      // Reset ray visibility
+      showRayPaths = false;
+      currentRayIndex = -1;
+      
+      // Recalculate reflections
+      calculateReflections();
+      console.log("Reset complete with", reflections.length, "reflections");
+    };
+    console.log("Reset button handler setup complete");
+  } else {
+    console.error("Reset button not found in the DOM!");
+  }
+  
   // Get the cycle button and add a click event handler
   const cycleBtn = document.getElementById('cycleRay');
   if (cycleBtn) {
@@ -70,6 +162,8 @@ window.onload = function() {
       addNewMirror(); // Add a new mirror
     };
   }
+  
+  console.log("Window onload completed, all buttons initialized");
 };
 
 function setup() {
@@ -115,12 +209,15 @@ function draw() {
 }
 
 function initializeGame() {
+  console.log("Initializing game with random positions");
+  
   // Create a ball at a random position
   ball = {
     x: random(BALL_RADIUS, width - BALL_RADIUS),
     y: random(BALL_RADIUS, height * 0.7),  // Keep ball in upper 70% of screen
     radius: BALL_RADIUS
   };
+  console.log("Ball created at:", ball.x, ball.y);
   
   // Create random mirrors with fixed length
   mirrors = [];
@@ -199,10 +296,12 @@ function initializeGame() {
       normal: normal, // Normal vector points from black to blue side
       width: MIRROR_WIDTH
     });
+    console.log("Mirror created at:", x1, y1, "to", x2, y2);
   }
   
   // Clear reflections
   reflections = [];
+  console.log("Game initialization complete");
 }
 
 function drawMirrors() {
@@ -769,21 +868,6 @@ function normalizeVector(v) {
 
 function dotProduct(v1, v2) {
   return v1.x * v2.x + v1.y * v2.y;
-}
-
-function keyPressed() {
-  if (key === 'r' || key === 'R') {
-    initializeGame();
-    return false;
-  }
-  
-  // Toggle ray paths with 'p' key
-  if (key === 'p' || key === 'P') {
-    showRayPaths = !showRayPaths;
-    return false;
-  }
-  
-  return false;
 }
 
 function mousePressed() {
