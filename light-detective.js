@@ -36,23 +36,30 @@ let draggedMirrorIndex = null; // Index of the mirror being dragged for middle d
 
 // This function runs when the page loads
 window.onload = function() {
-  // Get the toggle button and add a click event handler
-  const toggleBtn = document.getElementById('toggleRay');
-  if (toggleBtn) {
-    toggleBtn.onclick = function() {
-      // Cycle through ray paths instead of toggling all on/off
+  // Get the cycle button and add a click event handler
+  const cycleBtn = document.getElementById('cycleRay');
+  if (cycleBtn) {
+    cycleBtn.onclick = function() {
+      // If rays are currently hidden, show the first ray
       if (currentRayIndex === -1) {
-        // If no rays are shown, show the first one
         currentRayIndex = 0;
         showRayPaths = true;
       } else {
-        // Cycle to the next ray, or turn off rays if we've seen them all
-        currentRayIndex++;
-        if (currentRayIndex >= reflections.length) {
-          currentRayIndex = -1;
-          showRayPaths = false;
-        }
+        // Cycle to the next ray, wrapping around if at the end
+        currentRayIndex = (currentRayIndex + 1) % reflections.length;
+        // Ensure rays stay visible
+        showRayPaths = true;
       }
+    };
+  }
+  
+  // Get the hide rays button and add a click event handler
+  const hideRayBtn = document.getElementById('hideRay');
+  if (hideRayBtn) {
+    hideRayBtn.onclick = function() {
+      // Hide all rays
+      showRayPaths = false;
+      currentRayIndex = -1;
     };
   }
   
