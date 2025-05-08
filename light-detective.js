@@ -1560,6 +1560,11 @@ function loadPuzzle(puzzleFilename) {
         });
     })
     .then(arrangementData => {
+      // If the puzzle has randomization settings, apply them
+      if (currentPuzzle.randomize) {
+        applyRandomization(arrangementData);
+      }
+
       // Import the arrangement
       const success = importArrangement(arrangementData);
       if (!success) {
@@ -1595,6 +1600,231 @@ function loadPuzzle(puzzleFilename) {
       // Exit puzzle mode on error
       exitPuzzleMode();
     });
+}
+
+// Function to apply randomization to an arrangement based on puzzle settings
+function applyRandomization(arrangementData) {
+  const randomize = currentPuzzle.randomize;
+  
+  // Randomize ball position if specified
+  if (randomize.ball) {
+    const ballSettings = randomize.ball;
+    
+    // If specific region is provided, use it
+    if (ballSettings.region) {
+      const region = ballSettings.region;
+      arrangementData.ball.x = random(region.x || 0, region.width || width);
+      arrangementData.ball.y = random(region.y || 0, region.height || height * 0.7);
+    } 
+    // Otherwise randomize within safe bounds
+    else {
+      const ballRadius = arrangementData.ball.radius || BALL_RADIUS;
+      arrangementData.ball.x = random(ballRadius, width - ballRadius);
+      arrangementData.ball.y = random(ballRadius, height * 0.7); // Keep ball in upper 70% of screen
+    }
+  }
+  
+  // Randomize eye position if specified
+  if (randomize.eye) {
+    const eyeSettings = randomize.eye;
+    
+    // If specific region is provided, use it
+    if (eyeSettings.region) {
+      const region = eyeSettings.region;
+      arrangementData.eye.x = random(region.x || 0, region.width || width);
+      arrangementData.eye.y = random(region.y || height * 0.5, region.height || height);
+    } 
+    // Otherwise randomize within safe bounds
+    else {
+      arrangementData.eye.x = random(EYE_SIZE, width - EYE_SIZE);
+      arrangementData.eye.y = random(height * 0.5, height - EYE_SIZE); // Keep eye in lower half of screen
+    }
+  }
+  
+  // Randomize mirrors if specified
+  if (randomize.mirrors) {
+    const mirrorSettings = randomize.mirrors;
+    
+    // For each mirror in the arrangement
+    for (let i = 0; i < arrangementData.mirrors.length; i++) {
+      const mirror = arrangementData.mirrors[i];
+      
+      // Randomize position if specified
+      if (mirrorSettings.position) {
+        let region = mirrorSettings.region || {
+          x: 0, 
+          y: 0, 
+          width: width, 
+          height: height * 0.8 // Keep mirrors in upper 80% of screen
+        };
+        
+        // Calculate center point for the mirror
+        const centerX = random(region.x + MIRROR_LENGTH/2, region.width - MIRROR_LENGTH/2);
+        const centerY = random(region.y + MIRROR_LENGTH/2, region.height - MIRROR_LENGTH/2);
+        
+        // Randomize rotation angle if specified
+        let angle = 0;
+        if (mirrorSettings.rotation) {
+          if (typeof mirrorSettings.rotation === 'object') {
+            angle = random(mirrorSettings.rotation.min || 0, mirrorSettings.rotation.max || TWO_PI);
+          } else {
+            angle = random(TWO_PI);
+          }
+        }
+        
+        // Calculate mirror length
+        let mirrorLength = MIRROR_LENGTH;
+        if (mirrorSettings.size) {
+          if (typeof mirrorSettings.size === 'object') {
+            mirrorLength = random(mirrorSettings.size.min || MIRROR_LENGTH/2, 
+                                mirrorSettings.size.max || MIRROR_LENGTH*2);
+          } else {
+            // Random variation of +/- 25% from standard length
+            mirrorLength = random(MIRROR_LENGTH * 0.75, MIRROR_LENGTH * 1.25);
+          }
+        }
+        
+        // Calculate new endpoint positions based on center, angle, and length
+        const halfLength = mirrorLength / 2;
+        mirror.x1 = centerX - cos(angle) * halfLength;
+        mirror.y1 = centerY - sin(angle) * halfLength;
+        mirror.x2 = centerX + cos(angle) * halfLength;
+        mirror.y2 = centerY + sin(angle) * halfLength;
+        
+        // Calculate the mirror's normal vector
+        const mirrorVector = { 
+          x: mirror.x2 - mirror.x1, 
+          y: mirror.y2 - mirror.y1 
+        };
+        const mirrorActualLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+        
+        // Get normalized normal vector
+        mirror.normal = {
+          x: -mirrorVector.y / mirrorActualLength,
+          y: mirrorVector.x / mirrorActualLength
+        };
+      }
+      
+      // Randomize mirror width if specified
+      if (mirrorSettings.width) {
+        if (typeof mirrorSettings.width === 'object') {
+          mirror.width = random(mirrorSettings.width.min || 2, 
+                              mirrorSettings.width.max || 8);
+        } else {
+          // Random variation of +/- 50% from standard width
+          mirror.width = random(MIRROR_WIDTH * 0.5, MIRROR_WIDTH * 1.5);
+        }
+      }
+    }
+  }
+  
+  // If specified, randomize the number of mirrors
+  if (randomize.mirrors && randomize.mirrors.count) {
+    const countSettings = randomize.mirrors.count;
+    let targetCount;
+    
+    if (typeof countSettings === 'object') {
+      targetCount = Math.floor(random(countSettings.min || 1, (countSettings.max || 5) + 1));
+    } else {
+      targetCount = Math.max(1, Math.floor(random(1, 6))); // 1-5 mirrors
+    }
+    
+    // Current count
+    const currentCount = arrangementData.mirrors.length;
+    
+    // If we need more mirrors, add them
+    if (targetCount > currentCount) {
+      for (let i = currentCount; i < targetCount; i++) {
+        addRandomMirror(arrangementData, randomize.mirrors);
+      }
+    }
+    // If we need fewer mirrors, remove some
+    else if (targetCount < currentCount) {
+      // Remove random mirrors until we reach target count
+      while (arrangementData.mirrors.length > targetCount) {
+        const indexToRemove = Math.floor(random(arrangementData.mirrors.length));
+        arrangementData.mirrors.splice(indexToRemove, 1);
+      }
+    }
+  }
+}
+
+// Helper function to add a random mirror to an arrangement
+function addRandomMirror(arrangementData, mirrorSettings) {
+  // Define region for new mirror
+  let region = mirrorSettings.region || {
+    x: 0, 
+    y: 0, 
+    width: width, 
+    height: height * 0.8 // Keep mirrors in upper 80% of screen
+  };
+  
+  // Calculate center point for the mirror
+  const centerX = random(region.x + MIRROR_LENGTH/2, region.width - MIRROR_LENGTH/2);
+  const centerY = random(region.y + MIRROR_LENGTH/2, region.height - MIRROR_LENGTH/2);
+  
+  // Randomize rotation angle
+  let angle = 0;
+  if (mirrorSettings.rotation) {
+    if (typeof mirrorSettings.rotation === 'object') {
+      angle = random(mirrorSettings.rotation.min || 0, mirrorSettings.rotation.max || TWO_PI);
+    } else {
+      angle = random(TWO_PI);
+    }
+  } else {
+    angle = random(TWO_PI);
+  }
+  
+  // Calculate mirror length
+  let mirrorLength = MIRROR_LENGTH;
+  if (mirrorSettings.size) {
+    if (typeof mirrorSettings.size === 'object') {
+      mirrorLength = random(mirrorSettings.size.min || MIRROR_LENGTH/2, 
+                          mirrorSettings.size.max || MIRROR_LENGTH*2);
+    } else {
+      // Random variation of +/- 25% from standard length
+      mirrorLength = random(MIRROR_LENGTH * 0.75, MIRROR_LENGTH * 1.25);
+    }
+  }
+  
+  // Calculate mirror width
+  let mirrorWidth = MIRROR_WIDTH;
+  if (mirrorSettings.width) {
+    if (typeof mirrorSettings.width === 'object') {
+      mirrorWidth = random(mirrorSettings.width.min || 2, 
+                        mirrorSettings.width.max || 8);
+    } else {
+      // Random variation of +/- 50% from standard width
+      mirrorWidth = random(MIRROR_WIDTH * 0.5, MIRROR_WIDTH * 1.5);
+    }
+  }
+  
+  // Calculate endpoints
+  const halfLength = mirrorLength / 2;
+  const x1 = centerX - cos(angle) * halfLength;
+  const y1 = centerY - sin(angle) * halfLength;
+  const x2 = centerX + cos(angle) * halfLength;
+  const y2 = centerY + sin(angle) * halfLength;
+  
+  // Calculate the mirror's normal vector
+  const mirrorVector = { 
+    x: x2 - x1, 
+    y: y2 - y1 
+  };
+  const mirrorVectorLength = Math.sqrt(mirrorVector.x * mirrorVector.x + mirrorVector.y * mirrorVector.y);
+  
+  // Get normalized normal vector
+  const normal = {
+    x: -mirrorVector.y / mirrorVectorLength,
+    y: mirrorVector.x / mirrorVectorLength
+  };
+  
+  // Add the new mirror to the arrangement
+  arrangementData.mirrors.push({
+    x1, y1, x2, y2,
+    normal: normal,
+    width: mirrorWidth
+  });
 }
 
 // Function to display puzzle information
@@ -1700,10 +1930,15 @@ function resetPuzzle() {
   // Reset puzzle start time
   puzzleStartTime = new Date().getTime();
   
-  // Reload the arrangement but don't reload the whole puzzle
+  // Load the associated arrangement
   fetch(`arrangements/${currentPuzzle.arrangement}`)
     .then(response => response.json())
     .then(arrangementData => {
+      // If the puzzle has randomization settings, apply them
+      if (currentPuzzle.randomize) {
+        applyRandomization(arrangementData);
+      }
+      
       // Import the arrangement
       importArrangement(arrangementData);
       

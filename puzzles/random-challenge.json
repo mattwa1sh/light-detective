@@ -1,0 +1,66 @@
+{
+  "name": "Random Challenge",
+  "description": "Every time you try this puzzle, the elements will be in different positions! Can you create exactly two first-order reflections?",
+  "arrangement": "wrong-optics-1.json",
+  "movableObjects": {
+    "mirrors": true,
+    "ball": false,
+    "eye": false
+  },
+  "winCondition": {
+    "type": "exactReflections",
+    "order": 1,
+    "count": 2
+  },
+  "loseCondition": {
+    "type": "totalReflections",
+    "operator": ">",
+    "count": 3
+  },
+  "randomize": {
+    "ball": {
+      "region": {
+        "x": 100,
+        "y": 100, 
+        "width": 900,
+        "height": 300
+      }
+    },
+    "eye": {
+      "region": {
+        "x": 400,
+        "y": 650,
+        "width": 800,
+        "height": 750
+      }
+    },
+    "mirrors": {
+      "position": true,
+      "rotation": true,
+      "size": {
+        "min": 150,
+        "max": 300
+      },
+      "width": {
+        "min": 3,
+        "max": 6
+      },
+      "count": {
+        "min": 2,
+        "max": 4
+      },
+      "region": {
+        "x": 50,
+        "y": 50,
+        "width": 1150,
+        "height": 600
+      }
+    }
+  },
+  "difficulty": "medium",
+  "hints": [
+    "This puzzle changes each time you try it - keep experimenting!",
+    "Try to position mirrors to create exactly two reflections visible to the eye.",
+    "Remember that light reflects at the same angle it hits the mirror."
+  ]
+} 
