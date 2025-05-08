@@ -1,0 +1,63 @@
+{
+  "name": "Reflection Cascade",
+  "description": "Can you create a cascade of at least 15 reflections? Position the 3 mirrors strategically to create multiple bouncing light paths.",
+  "arrangement": "wrong-optics-1.json",
+  "movableObjects": {
+    "mirrors": true,
+    "ball": false,
+    "eye": false
+  },
+  "winCondition": {
+    "type": "totalReflections",
+    "operator": ">=",
+    "count": 15
+  },
+  "loseCondition": null,
+  "randomize": {
+    "ball": {
+      "region": {
+        "x": 100,
+        "y": 100, 
+        "width": 900,
+        "height": 300
+      }
+    },
+    "eye": {
+      "region": {
+        "x": 400,
+        "y": 650,
+        "width": 800,
+        "height": 750
+      }
+    },
+    "mirrors": {
+      "position": true,
+      "rotation": true,
+      "size": {
+        "min": 200,
+        "max": 350
+      },
+      "width": {
+        "min": 4,
+        "max": 6
+      },
+      "count": {
+        "min": 3,
+        "max": 3
+      },
+      "region": {
+        "x": 50,
+        "y": 50,
+        "width": 1150,
+        "height": 600
+      }
+    }
+  },
+  "difficulty": "hard",
+  "hints": [
+    "Try to position mirrors to create a series of bouncing reflections.",
+    "Arrange the mirrors so light can bounce back and forth between them multiple times.",
+    "Higher-order reflections (those that bounce off multiple mirrors) count toward your total.",
+    "Position the mirrors to create a 'hall of mirrors' effect with many bounces."
+  ]
+} 

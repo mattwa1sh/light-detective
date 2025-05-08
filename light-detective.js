@@ -2095,11 +2095,11 @@ function puzzleSolved() {
   if (statusElement) {
     statusElement.innerHTML = `
       <div class="status-success">PUZZLE SOLVED!</div>
-      <button id="nextPuzzleBtn">Next Puzzle</button>
+      <button id="retryPuzzleBtn">Try Again</button>
     `;
     
-    // Set up next puzzle button
-    document.getElementById('nextPuzzleBtn').onclick = loadNextPuzzle;
+    // Set up retry button
+    document.getElementById('retryPuzzleBtn').onclick = resetPuzzle;
   }
 }
 

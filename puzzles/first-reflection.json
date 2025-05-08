@@ -1,7 +1,7 @@
 {
   "name": "First Reflection Challenge",
   "description": "Create exactly two first-order reflections to solve this puzzle.",
-  "arrangement": "wrong-optics-1.json",
+  "arrangement": "parallel-mirrors.json",
   "movableObjects": {
     "mirrors": true,
     "ball": false,

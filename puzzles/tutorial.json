@@ -13,6 +13,26 @@
     "count": 1
   },
   "loseCondition": null,
+  "randomize": {
+    "mirrors": {
+      "position": true,
+      "rotation": true,
+      "size": {
+        "min": 150,
+        "max": 300
+      },
+      "width": {
+        "min": 3,
+        "max": 6
+      },
+      "region": {
+        "x": 50,
+        "y": 50,
+        "width": 1150,
+        "height": 600
+      }
+    }
+  },
   "difficulty": "easy",
   "hints": [
     "Drag the blue side of a mirror to position it between the ball and the eye.",
