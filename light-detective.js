@@ -163,8 +163,134 @@ window.onload = function() {
     };
   }
   
+  // Set up export button
+  const exportBtn = document.getElementById('exportArrangement');
+  if (exportBtn) {
+    exportBtn.onclick = function() {
+      exportArrangement(); // Export the current arrangement to JSON
+    };
+  }
+  
   console.log("Window onload completed, all buttons initialized");
 };
+
+// Function to export the current arrangement to a JSON file
+function exportArrangement() {
+  // Create a JSON object with the current state
+  const arrangement = {
+    ball: {
+      x: ball.x,
+      y: ball.y,
+      radius: ball.radius
+    },
+    eye: {
+      x: eyePosition.x,
+      y: eyePosition.y
+    },
+    mirrors: mirrors.map(mirror => ({
+      x1: mirror.x1,
+      y1: mirror.y1,
+      x2: mirror.x2,
+      y2: mirror.y2,
+      normal: mirror.normal,
+      width: mirror.width
+    }))
+  };
+  
+  // Convert to JSON string
+  const jsonString = JSON.stringify(arrangement, null, 2);
+  
+  // Create a timestamp for the filename
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `arrangement-${timestamp}.json`;
+  
+  // Create a blob with the JSON data
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  // Create a temporary anchor element to trigger the download
+  const a = document.createElement('a');
+  a.href = url;
+  
+  // Set download path to include arrangements folder
+  a.download = `arrangements/${filename}`;
+  
+  // Append to the body, click, and clean up
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  
+  // Clean up the URL object
+  URL.revokeObjectURL(url);
+  
+  console.log(`Exported arrangement to arrangements/${filename}`);
+}
+
+// Function to import an arrangement from a JSON file
+function importArrangement(jsonData) {
+  try {
+    // Parse the JSON data
+    const arrangement = JSON.parse(jsonData);
+    
+    // Import ball data
+    ball = {
+      x: arrangement.ball.x,
+      y: arrangement.ball.y,
+      radius: arrangement.ball.radius || BALL_RADIUS
+    };
+    
+    // Import eye position
+    eyePosition = {
+      x: arrangement.eye.x,
+      y: arrangement.eye.y
+    };
+    
+    // Import mirrors
+    mirrors = [];
+    for (let mirrorData of arrangement.mirrors) {
+      // Extract basic mirror data
+      const { x1, y1, x2, y2, normal, width } = mirrorData;
+      const mirrorWidth = width || MIRROR_WIDTH;
+      
+      // Calculate the sides of the mirror
+      const halfWidth = mirrorWidth / 2;
+      
+      // Blue side coordinates
+      const blueX1 = x1 + normal.x * halfWidth;
+      const blueY1 = y1 + normal.y * halfWidth;
+      const blueX2 = x2 + normal.x * halfWidth;
+      const blueY2 = y2 + normal.y * halfWidth;
+      
+      // Black side coordinates
+      const blackX1 = x1 - normal.x * halfWidth;
+      const blackY1 = y1 - normal.y * halfWidth;
+      const blackX2 = x2 - normal.x * halfWidth;
+      const blackY2 = y2 - normal.y * halfWidth;
+      
+      // Add mirror
+      mirrors.push({
+        x1, y1, x2, y2,
+        blueX1, blueY1, blueX2, blueY2,
+        blackX1, blackY1, blackX2, blackY2,
+        thickness: MIRROR_THICKNESS,
+        normal: normal,
+        width: mirrorWidth
+      });
+    }
+    
+    // Reset reflections and calculate new ones
+    reflections = [];
+    showRayPaths = false;
+    currentRayIndex = -1;
+    calculateReflections();
+    
+    console.log("Imported arrangement with", mirrors.length, "mirrors");
+    return true;
+  } catch (error) {
+    console.error("Error importing arrangement:", error);
+    return false;
+  }
+}
 
 function setup() {
   // Create a fixed-size canvas
