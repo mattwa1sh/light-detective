@@ -1,0 +1,39 @@
+{
+  "name": "Reflection Perfection",
+  "description": "Find the perfect balance of reflections to solve this challenging puzzle!",
+  "arrangement": "arrangement-2025-05-08T01-14-52-716Z.json",
+  "movableObjects": {
+    "mirrors": true,
+    "ball": true,
+    "eye": true
+  },
+  "winConditions": [
+    {
+      "type": "exactReflections",
+      "order": 1,
+      "count": 3
+    },
+    {
+      "type": "exactReflections",
+      "order": 2,
+      "count": 1
+    }
+  ],
+  "loseConditions": [
+    {
+      "type": "totalReflections",
+      "operator": ">",
+      "count": 5
+    },
+    {
+      "type": "timeLimit",
+      "seconds": 120
+    }
+  ],
+  "difficulty": "hard",
+  "hints": [
+    "Position the eye where it can see multiple reflections.",
+    "Try creating a sequence of mirrors that create exactly one second-order reflection.",
+    "The angle between mirrors is key to achieving the perfect balance."
+  ]
+} 

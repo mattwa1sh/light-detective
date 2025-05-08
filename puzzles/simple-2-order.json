@@ -1,0 +1,23 @@
+{
+  "name": "Second Order Masterpiece",
+  "description": "Position the ball to create at least one second-order reflection.",
+  "arrangement": "parallel-mirrors.json",
+  "movableObjects": {
+    "mirrors": false,
+    "ball": true,
+    "eye": true
+  },
+  "winCondition": {
+    "type": "minReflections",
+    "order": 2,
+    "count": 1
+  },
+  "loseCondition": {
+    "type": "timeLimit",
+    "seconds": 60
+  },
+  "hints": [
+    "The ball's position affects how light bounces between mirrors.",
+    "Try moving the ball to where multiple mirrors can create a chain reaction."
+  ]
+} 

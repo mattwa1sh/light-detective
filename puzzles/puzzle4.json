@@ -1,0 +1,23 @@
+{
+  "name": "Tutorial: First Steps",
+  "description": "Welcome to Light Detective! In this tutorial, create a single reflection to learn the basics.",
+  "arrangement": "arrangement-2025-05-08T01-17-33-996Z.json",
+  "movableObjects": {
+    "mirrors": true,
+    "ball": false,
+    "eye": false
+  },
+  "winCondition": {
+    "type": "exactReflections",
+    "order": 1,
+    "count": 1
+  },
+  "loseCondition": null,
+  "difficulty": "easy",
+  "hints": [
+    "Drag the blue side of a mirror to position it between the ball and the eye.",
+    "The blue side of the mirror is reflective, the black side is not.",
+    "Remember that light reflects at the same angle it hits the mirror.",
+    "Try different angles until the eye can see a reflection."
+  ]
+}

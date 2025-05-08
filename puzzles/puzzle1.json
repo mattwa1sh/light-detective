@@ -1,0 +1,24 @@
+{
+  "name": "First Reflection Challenge",
+  "description": "Create exactly two first-order reflections to solve this puzzle.",
+  "arrangement": "wrong-optics-1.json",
+  "movableObjects": {
+    "mirrors": true,
+    "ball": false,
+    "eye": false
+  },
+  "winCondition": {
+    "type": "exactReflections",
+    "order": 1,
+    "count": 2
+  },
+  "loseCondition": {
+    "type": "totalReflections",
+    "operator": ">",
+    "count": 3
+  },
+  "hints": [
+    "Try repositioning the mirrors to create exactly two reflections.",
+    "Make sure the reflections are visible to the eye."
+  ]
+} 

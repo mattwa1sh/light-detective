@@ -34,6 +34,15 @@ let draggedObject = null;
 let draggedMirrorPoint = null; // Which endpoint of a mirror is being dragged
 let draggedMirrorIndex = null; // Index of the mirror being dragged for middle dragging
 
+// Puzzle variables
+let currentPuzzle = null;
+let currentPuzzleFilename = null; // Store the filename for easier reference
+let isPuzzleMode = false;
+let puzzleStartTime = null;
+let isPuzzleSolved = false;
+let isPuzzleFailed = false;
+let timeLimitInterval = null; // For tracking the timer interval
+
 // This function runs when the page loads
 window.onload = function() {
   console.log("Window loaded, starting initialization");
@@ -331,6 +340,11 @@ function draw() {
   
   // Draw the eye at the center bottom
   drawEye();
+  
+  // Check puzzle conditions if in puzzle mode
+  if (isPuzzleMode && currentPuzzle && !isPuzzleSolved && !isPuzzleFailed) {
+    checkPuzzleConditions();
+  }
 }
 
 function initializeGame() {
@@ -1066,100 +1080,26 @@ function dotProduct(v1, v2) {
   return v1.x * v2.x + v1.y * v2.y;
 }
 
-function mousePressed() {
-  // Check if clicked on the ball
-  if (dist(mouseX, mouseY, ball.x, ball.y) < ball.radius) {
-    isDragging = true;
-    draggedObject = 'ball';
-    return;
-  }
+// Function to check if objects can be moved in the current game state
+function canMoveObjects() {
+  // In sandbox mode, everything is movable
+  if (!isPuzzleMode) return true;
   
-  // Check if clicked on a mirror endpoint or middle
-  for (let i = 0; i < mirrors.length; i++) {
-    const mirror = mirrors[i];
-    
-    // Check first endpoint of either side
-    if (dist(mouseX, mouseY, mirror.x1, mirror.y1) < 10 ||
-        dist(mouseX, mouseY, mirror.blueX1, mirror.blueY1) < 10 ||
-        dist(mouseX, mouseY, mirror.blackX1, mirror.blackY1) < 10) {
-      isDragging = true;
-      draggedObject = 'mirror';
-      draggedMirrorPoint = {index: i, point: 1};
-      draggedMirrorIndex = null;
-      return;
-    }
-    
-    // Check second endpoint of either side
-    if (dist(mouseX, mouseY, mirror.x2, mirror.y2) < 10 ||
-        dist(mouseX, mouseY, mirror.blueX2, mirror.blueY2) < 10 ||
-        dist(mouseX, mouseY, mirror.blackX2, mirror.blackY2) < 10) {
-      isDragging = true;
-      draggedObject = 'mirror';
-      draggedMirrorPoint = {index: i, point: 2};
-      draggedMirrorIndex = null;
-      return;
-    }
-    
-    // Check if clicked on the middle of a mirror
-    // First calculate the midpoint
-    const midX = (mirror.x1 + mirror.x2) / 2;
-    const midY = (mirror.y1 + mirror.y2) / 2;
-    
-    // Check if clicked near the midpoint or along the line segment
-    if (dist(mouseX, mouseY, midX, midY) < 15 || 
-        isPointNearLineSegment(mouseX, mouseY, mirror.x1, mirror.y1, mirror.x2, mirror.y2, 10) ||
-        isPointNearLineSegment(mouseX, mouseY, mirror.blueX1, mirror.blueY1, mirror.blueX2, mirror.blueY2, 10) ||
-        isPointNearLineSegment(mouseX, mouseY, mirror.blackX1, mirror.blackY1, mirror.blackX2, mirror.blackY2, 10)) {
-      isDragging = true;
-      draggedObject = 'mirror';
-      draggedMirrorPoint = null;
-      draggedMirrorIndex = i;
-      return;
-    }
-  }
-  
-  // Check if clicked on the eye
-  if (dist(mouseX, mouseY, eyePosition.x, eyePosition.y) < EYE_SIZE / 2) {
-    isDragging = true;
-    draggedObject = 'eye';
-    return;
-  }
+  // In puzzle mode, objects are movable if:
+  // 1. We have a valid puzzle loaded AND
+  // 2. The puzzle is not yet solved or failed
+  return currentPuzzle && !(isPuzzleSolved || isPuzzleFailed);
 }
 
-// Helper function to check if a point is near a line segment
-function isPointNearLineSegment(px, py, x1, y1, x2, y2, threshold) {
-  // Vector from line start to point
-  const dx = px - x1;
-  const dy = py - y1;
-  
-  // Vector representing the line
-  const lineVectorX = x2 - x1;
-  const lineVectorY = y2 - y1;
-  
-  // Calculate squared length of the line vector (to avoid sqrt)
-  const lineLengthSquared = lineVectorX * lineVectorX + lineVectorY * lineVectorY;
-  
-  // If the line is very short, treat it as a point
-  if (lineLengthSquared < 0.0001) {
-    return dist(px, py, x1, y1) < threshold;
-  }
-  
-  // Calculate dot product of (point - line start) and line vector
-  const dotProduct = dx * lineVectorX + dy * lineVectorY;
-  
-  // Calculate projection ratio (0 = at start point, 1 = at end point)
-  const projectionRatio = constrain(dotProduct / lineLengthSquared, 0, 1);
-  
-  // Find the closest point on the line segment
-  const closestX = x1 + projectionRatio * lineVectorX;
-  const closestY = y1 + projectionRatio * lineVectorY;
-  
-  // Check if the point is within the threshold distance
-  return dist(px, py, closestX, closestY) < threshold;
-}
-
-function mouseDragged() {
+// Override mouseDragged to check if objects can be moved
+mouseDragged = function() {
+  // If not dragging anything, no need to proceed
   if (!isDragging) return;
+  
+  // Check if objects can be moved
+  if (!canMoveObjects()) {
+    return; // Don't allow movement if the puzzle is solved/failed
+  }
   
   if (draggedObject === 'ball') {
     // Move the ball to the mouse position
@@ -1176,22 +1116,22 @@ function mouseDragged() {
   else if (draggedObject === 'mirror') {
     if (draggedMirrorPoint) {
       // Get the mirror being dragged by endpoint
-    const mirror = mirrors[draggedMirrorPoint.index];
+      const mirror = mirrors[draggedMirrorPoint.index];
     
       // Update the appropriate endpoint of the center line
-    if (draggedMirrorPoint.point === 1) {
-      mirror.x1 = mouseX;
-      mirror.y1 = mouseY;
-    } else {
-      mirror.x2 = mouseX;
-      mirror.y2 = mouseY;
-    }
+      if (draggedMirrorPoint.point === 1) {
+        mirror.x1 = mouseX;
+        mirror.y1 = mouseY;
+      } else {
+        mirror.x2 = mouseX;
+        mirror.y2 = mouseY;
+      }
     
-    // Keep endpoints within canvas bounds
-    mirror.x1 = constrain(mirror.x1, 0, width);
-    mirror.y1 = constrain(mirror.y1, 0, height);
-    mirror.x2 = constrain(mirror.x2, 0, width);
-    mirror.y2 = constrain(mirror.y2, 0, height);
+      // Keep endpoints within canvas bounds
+      mirror.x1 = constrain(mirror.x1, 0, width);
+      mirror.y1 = constrain(mirror.y1, 0, height);
+      mirror.x2 = constrain(mirror.x2, 0, width);
+      mirror.y2 = constrain(mirror.y2, 0, height);
       
       // Recalculate the mirror's normal vector
       const mirrorVector = { 
@@ -1250,7 +1190,7 @@ function mouseDragged() {
         mirror.y2 = 0;
       } else if (mirror.y2 > height) {
         mirror.y1 -= (mirror.y2 - height);
-        mirror.y2 = height;
+        mirror.y1 = height;
       }
     }
     
@@ -1287,13 +1227,168 @@ function mouseDragged() {
     // Recalculate reflections
     calculateReflections();
   }
-}
+};
 
-function mouseReleased() {
-  isDragging = false;
-  draggedObject = null;
-  draggedMirrorPoint = null;
-  draggedMirrorIndex = null;
+// Reset mousePressed to use a cleaner approach
+mousePressed = function() {
+  // Don't allow interaction if the puzzle is solved or failed
+  if (isPuzzleMode && (isPuzzleSolved || isPuzzleFailed)) {
+    return;
+  }
+  
+  // In puzzle mode, check which objects are movable
+  if (isPuzzleMode && currentPuzzle) {
+    const movable = currentPuzzle.movableObjects;
+    
+    // Check if clicked on the ball
+    if (dist(mouseX, mouseY, ball.x, ball.y) < ball.radius) {
+      if (movable.ball) {
+        isDragging = true;
+        draggedObject = 'ball';
+      }
+      return;
+    }
+    
+    // Check if clicked on a mirror
+    for (let i = 0; i < mirrors.length; i++) {
+      const mirror = mirrors[i];
+      
+      // Check if clicked near any part of the mirror
+      if (dist(mouseX, mouseY, mirror.x1, mirror.y1) < 10 ||
+          dist(mouseX, mouseY, mirror.blueX1, mirror.blueY1) < 10 ||
+          dist(mouseX, mouseY, mirror.blackX1, mirror.blackY1) < 10 ||
+          dist(mouseX, mouseY, mirror.x2, mirror.y2) < 10 ||
+          dist(mouseX, mouseY, mirror.blueX2, mirror.blueY2) < 10 ||
+          dist(mouseX, mouseY, mirror.blackX2, mirror.blackY2) < 10 ||
+          isPointNearLineSegment(mouseX, mouseY, mirror.x1, mirror.y1, mirror.x2, mirror.y2, 10) ||
+          isPointNearLineSegment(mouseX, mouseY, mirror.blueX1, mirror.blueY1, mirror.blueX2, mirror.blueY2, 10) ||
+          isPointNearLineSegment(mouseX, mouseY, mirror.blackX1, mirror.blackY1, mirror.blackX2, mirror.blackY2, 10)) {
+        
+        if (movable.mirrors) {
+          isDragging = true;
+          draggedObject = 'mirror';
+          
+          // Check if endpoint or middle
+          if (dist(mouseX, mouseY, mirror.x1, mirror.y1) < 10 ||
+              dist(mouseX, mouseY, mirror.blueX1, mirror.blueY1) < 10 ||
+              dist(mouseX, mouseY, mirror.blackX1, mirror.blackY1) < 10) {
+            draggedMirrorPoint = {index: i, point: 1};
+            draggedMirrorIndex = null;
+          } else if (dist(mouseX, mouseY, mirror.x2, mirror.y2) < 10 ||
+                     dist(mouseX, mouseY, mirror.blueX2, mirror.blueY2) < 10 ||
+                     dist(mouseX, mouseY, mirror.blackX2, mirror.blackY2) < 10) {
+            draggedMirrorPoint = {index: i, point: 2};
+            draggedMirrorIndex = null;
+          } else {
+            draggedMirrorPoint = null;
+            draggedMirrorIndex = i;
+          }
+        }
+        return;
+      }
+    }
+    
+    // Check if clicked on the eye
+    if (dist(mouseX, mouseY, eyePosition.x, eyePosition.y) < EYE_SIZE / 2) {
+      if (movable.eye) {
+        isDragging = true;
+        draggedObject = 'eye';
+      }
+      return;
+    }
+  } else {
+    // In sandbox mode, everything is movable
+    
+    // Check if clicked on the ball
+    if (dist(mouseX, mouseY, ball.x, ball.y) < ball.radius) {
+      isDragging = true;
+      draggedObject = 'ball';
+      return;
+    }
+    
+    // Check if clicked on a mirror endpoint or middle
+    for (let i = 0; i < mirrors.length; i++) {
+      const mirror = mirrors[i];
+      
+      // Check first endpoint of either side
+      if (dist(mouseX, mouseY, mirror.x1, mirror.y1) < 10 ||
+          dist(mouseX, mouseY, mirror.blueX1, mirror.blueY1) < 10 ||
+          dist(mouseX, mouseY, mirror.blackX1, mirror.blackY1) < 10) {
+        isDragging = true;
+        draggedObject = 'mirror';
+        draggedMirrorPoint = {index: i, point: 1};
+        draggedMirrorIndex = null;
+        return;
+      }
+      
+      // Check second endpoint of either side
+      if (dist(mouseX, mouseY, mirror.x2, mirror.y2) < 10 ||
+          dist(mouseX, mouseY, mirror.blueX2, mirror.blueY2) < 10 ||
+          dist(mouseX, mouseY, mirror.blackX2, mirror.blackY2) < 10) {
+        isDragging = true;
+        draggedObject = 'mirror';
+        draggedMirrorPoint = {index: i, point: 2};
+        draggedMirrorIndex = null;
+        return;
+      }
+      
+      // Check if clicked on the middle of a mirror
+      // First calculate the midpoint
+      const midX = (mirror.x1 + mirror.x2) / 2;
+      const midY = (mirror.y1 + mirror.y2) / 2;
+      
+      // Check if clicked near the midpoint or along the line segment
+      if (dist(mouseX, mouseY, midX, midY) < 15 || 
+          isPointNearLineSegment(mouseX, mouseY, mirror.x1, mirror.y1, mirror.x2, mirror.y2, 10) ||
+          isPointNearLineSegment(mouseX, mouseY, mirror.blueX1, mirror.blueY1, mirror.blueX2, mirror.blueY2, 10) ||
+          isPointNearLineSegment(mouseX, mouseY, mirror.blackX1, mirror.blackY1, mirror.blackX2, mirror.blackY2, 10)) {
+        isDragging = true;
+        draggedObject = 'mirror';
+        draggedMirrorPoint = null;
+        draggedMirrorIndex = i;
+        return;
+      }
+    }
+    
+    // Check if clicked on the eye
+    if (dist(mouseX, mouseY, eyePosition.x, eyePosition.y) < EYE_SIZE / 2) {
+      isDragging = true;
+      draggedObject = 'eye';
+      return;
+    }
+  }
+};
+
+// Helper function to check if a point is near a line segment
+function isPointNearLineSegment(px, py, x1, y1, x2, y2, threshold) {
+  // Vector from line start to point
+  const dx = px - x1;
+  const dy = py - y1;
+  
+  // Vector representing the line
+  const lineVectorX = x2 - x1;
+  const lineVectorY = y2 - y1;
+  
+  // Calculate squared length of the line vector (to avoid sqrt)
+  const lineLengthSquared = lineVectorX * lineVectorX + lineVectorY * lineVectorY;
+  
+  // If the line is very short, treat it as a point
+  if (lineLengthSquared < 0.0001) {
+    return dist(px, py, x1, y1) < threshold;
+  }
+  
+  // Calculate dot product of (point - line start) and line vector
+  const dotProduct = dx * lineVectorX + dy * lineVectorY;
+  
+  // Calculate projection ratio (0 = at start point, 1 = at end point)
+  const projectionRatio = constrain(dotProduct / lineLengthSquared, 0, 1);
+  
+  // Find the closest point on the line segment
+  const closestX = x1 + projectionRatio * lineVectorX;
+  const closestY = y1 + projectionRatio * lineVectorY;
+  
+  // Check if the point is within the threshold distance
+  return dist(px, py, closestX, closestY) < threshold;
 }
 
 // Function to add a new mirror to the scene
@@ -1423,4 +1518,469 @@ function getVisibleMirrors() {
   }
   
   return visibleMirrors;
+}
+
+// Function to load a puzzle from the puzzles folder
+function loadPuzzle(puzzleFilename) {
+  isPuzzleMode = true;
+  isPuzzleSolved = false;
+  isPuzzleFailed = false;
+  currentPuzzleFilename = puzzleFilename; // Store the filename
+  
+  // Clear any existing timer
+  if (timeLimitInterval) {
+    clearInterval(timeLimitInterval);
+    timeLimitInterval = null;
+  }
+  
+  // Reset puzzle start time
+  puzzleStartTime = new Date().getTime();
+  
+  console.log(`Loading puzzle: ${puzzleFilename}`);
+  
+  // Load the puzzle JSON file
+  fetch(`puzzles/${puzzleFilename}`)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to fetch puzzle: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
+    })
+    .then(puzzleData => {
+      currentPuzzle = puzzleData;
+      console.log(`Loaded puzzle: ${currentPuzzle.name}`);
+      
+      // Load the associated arrangement
+      return fetch(`arrangements/${currentPuzzle.arrangement}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch arrangement: ${response.status} ${response.statusText}`);
+          }
+          return response.json();
+        });
+    })
+    .then(arrangementData => {
+      // Import the arrangement
+      const success = importArrangement(arrangementData);
+      if (!success) {
+        throw new Error("Failed to import arrangement");
+      }
+      
+      // Display puzzle information
+      displayPuzzleInfo();
+    })
+    .catch(error => {
+      console.error(`Error loading puzzle: ${error.message}`);
+      
+      // Show error message to user
+      const errorMsg = document.createElement('div');
+      errorMsg.className = 'error-message';
+      errorMsg.textContent = `Error loading puzzle: ${error.message}`;
+      errorMsg.style.position = 'fixed';
+      errorMsg.style.top = '10px';
+      errorMsg.style.left = '50%';
+      errorMsg.style.transform = 'translateX(-50%)';
+      errorMsg.style.backgroundColor = '#ffebee';
+      errorMsg.style.color = '#f44336';
+      errorMsg.style.padding = '10px';
+      errorMsg.style.borderRadius = '4px';
+      errorMsg.style.zIndex = '1000';
+      document.body.appendChild(errorMsg);
+      
+      // Remove the error message after 5 seconds
+      setTimeout(() => {
+        errorMsg.remove();
+      }, 5000);
+      
+      // Exit puzzle mode on error
+      exitPuzzleMode();
+    });
+}
+
+// Function to display puzzle information
+function displayPuzzleInfo() {
+  if (!currentPuzzle) return;
+  
+  // Create or update the puzzle info panel
+  let puzzleInfoPanel = document.getElementById('puzzleInfoPanel');
+  if (!puzzleInfoPanel) {
+    puzzleInfoPanel = document.createElement('div');
+    puzzleInfoPanel.id = 'puzzleInfoPanel';
+    puzzleInfoPanel.className = 'puzzle-panel';
+    document.body.appendChild(puzzleInfoPanel);
+  }
+  
+  // Check if this puzzle has a time limit
+  const hasTimeLimit = hasTimeLimitCondition();
+  const timerElement = hasTimeLimit ? '<div id="puzzleTimer"></div>' : '';
+  
+  // Set the content
+  puzzleInfoPanel.innerHTML = `
+    <h3>${currentPuzzle.name}</h3>
+    <p>${currentPuzzle.description}</p>
+    <p class="movable-objects">Movable: ${getMovableObjectsText()}</p>
+    ${timerElement}
+    <div id="puzzleStatus"></div>
+    <button id="showHintBtn">Show Hint</button>
+    <button id="resetPuzzleBtn">Reset Puzzle</button>
+    <button id="exitPuzzleBtn">Exit Puzzle</button>
+  `;
+  
+  // Set up button event listeners
+  document.getElementById('showHintBtn').onclick = showPuzzleHint;
+  document.getElementById('resetPuzzleBtn').onclick = resetPuzzle;
+  document.getElementById('exitPuzzleBtn').onclick = exitPuzzleMode;
+  
+  // Start timer if needed
+  if (hasTimeLimit) {
+    startPuzzleTimer();
+  }
+}
+
+// Helper function to get text description of movable objects
+function getMovableObjectsText() {
+  if (!currentPuzzle) return "";
+  
+  const movable = currentPuzzle.movableObjects;
+  const parts = [];
+  
+  if (movable.mirrors) parts.push("Mirrors");
+  if (movable.ball) parts.push("Ball");
+  if (movable.eye) parts.push("Eye");
+  
+  return parts.join(", ");
+}
+
+// Function to show a random hint from the puzzle
+function showPuzzleHint() {
+  if (!currentPuzzle || !currentPuzzle.hints || currentPuzzle.hints.length === 0) return;
+  
+  // Pick a random hint
+  const randomIndex = Math.floor(Math.random() * currentPuzzle.hints.length);
+  const hint = currentPuzzle.hints[randomIndex];
+  
+  // Create or update the hint element
+  let hintElement = document.getElementById('puzzleHint');
+  if (!hintElement) {
+    hintElement = document.createElement('div');
+    hintElement.id = 'puzzleHint';
+    hintElement.className = 'puzzle-hint';
+    document.getElementById('puzzleInfoPanel').appendChild(hintElement);
+  }
+  
+  hintElement.textContent = `Hint: ${hint}`;
+  hintElement.style.display = 'block';
+  
+  // Hide the hint after 10 seconds
+  setTimeout(() => {
+    hintElement.style.display = 'none';
+  }, 10000);
+}
+
+// Function to reset the current puzzle
+function resetPuzzle() {
+  if (!currentPuzzle) return;
+  
+  // Reset puzzle state
+  isPuzzleSolved = false;
+  isPuzzleFailed = false;
+  
+  // Clear any status messages
+  const statusElement = document.getElementById('puzzleStatus');
+  if (statusElement) {
+    statusElement.innerHTML = '';
+  }
+  
+  // Clear any existing timer
+  if (timeLimitInterval) {
+    clearInterval(timeLimitInterval);
+    timeLimitInterval = null;
+  }
+  
+  // Reset puzzle start time
+  puzzleStartTime = new Date().getTime();
+  
+  // Reload the arrangement but don't reload the whole puzzle
+  fetch(`arrangements/${currentPuzzle.arrangement}`)
+    .then(response => response.json())
+    .then(arrangementData => {
+      // Import the arrangement
+      importArrangement(arrangementData);
+      
+      // If this puzzle has a time limit, restart the timer
+      if (hasTimeLimitCondition()) {
+        startPuzzleTimer();
+      }
+    })
+    .catch(error => {
+      console.error(`Error reloading arrangement: ${error}`);
+    });
+}
+
+// Function to exit puzzle mode
+function exitPuzzleMode() {
+  isPuzzleMode = false;
+  currentPuzzle = null;
+  currentPuzzleFilename = null; // Clear the filename
+  isPuzzleSolved = false;
+  isPuzzleFailed = false;
+  
+  // Clear any existing timer
+  if (timeLimitInterval) {
+    clearInterval(timeLimitInterval);
+    timeLimitInterval = null;
+  }
+  
+  // Remove the puzzle info panel
+  const puzzleInfoPanel = document.getElementById('puzzleInfoPanel');
+  if (puzzleInfoPanel) {
+    puzzleInfoPanel.remove();
+  }
+  
+  // Reset to default game state
+  initializeGame();
+}
+
+// Check if puzzle win/lose conditions are met
+function checkPuzzleConditions() {
+  if (!isPuzzleMode || !currentPuzzle) return;
+  
+  // Skip if puzzle is already solved or failed
+  if (isPuzzleSolved || isPuzzleFailed) return;
+  
+  // Count reflections by order
+  const reflectionCounts = countReflectionsByOrder();
+  
+  // Check win conditions
+  let winConditionsMet = false;
+  
+  if (currentPuzzle.winConditions) {
+    // Multiple win conditions (all must be met)
+    winConditionsMet = currentPuzzle.winConditions.every(condition => 
+      checkSingleCondition(condition, reflectionCounts));
+  } else if (currentPuzzle.winCondition) {
+    // Single win condition
+    winConditionsMet = checkSingleCondition(currentPuzzle.winCondition, reflectionCounts);
+  }
+  
+  // Check lose conditions
+  let loseConditionsMet = false;
+  
+  if (currentPuzzle.loseConditions) {
+    // Multiple lose conditions (any one can trigger failure)
+    loseConditionsMet = currentPuzzle.loseConditions.some(condition => 
+      checkSingleCondition(condition, reflectionCounts));
+  } else if (currentPuzzle.loseCondition) {
+    // Single lose condition
+    loseConditionsMet = checkSingleCondition(currentPuzzle.loseCondition, reflectionCounts);
+  }
+  
+  // Handle puzzle solved
+  if (winConditionsMet) {
+    puzzleSolved();
+  }
+  
+  // Handle puzzle failed
+  if (loseConditionsMet) {
+    puzzleFailed();
+  }
+}
+
+// Helper function to check a single condition
+function checkSingleCondition(condition, reflectionCounts) {
+  switch (condition.type) {
+    case 'exactReflections':
+      // Check if there are exactly N reflections of order X
+      return reflectionCounts[condition.order] === condition.count;
+      
+    case 'minReflections':
+      // Check if there are at least N reflections of order X
+      return reflectionCounts[condition.order] >= condition.count;
+      
+    case 'maxReflections':
+      // Check if there are at most N reflections of order X
+      return reflectionCounts[condition.order] <= condition.count;
+      
+    case 'totalReflections':
+      // Check total reflections against operator and count
+      const total = Object.values(reflectionCounts).reduce((sum, count) => sum + count, 0);
+      
+      switch (condition.operator) {
+        case '=': return total === condition.count;
+        case '>': return total > condition.count;
+        case '<': return total < condition.count;
+        case '>=': return total >= condition.count;
+        case '<=': return total <= condition.count;
+        default: return false;
+      }
+      
+    case 'timeLimit':
+      // Check if time limit is exceeded
+      const currentTime = new Date().getTime();
+      const elapsedSeconds = (currentTime - puzzleStartTime) / 1000;
+      return elapsedSeconds > condition.seconds;
+      
+    default:
+      console.error(`Unknown condition type: ${condition.type}`);
+      return false;
+  }
+}
+
+// Count reflections grouped by their order/depth
+function countReflectionsByOrder() {
+  const counts = {};
+  
+  // Initialize counts for all possible orders
+  for (let i = 1; i <= MAX_REFLECTIONS; i++) {
+    counts[i] = 0;
+  }
+  
+  // Count visible reflections by their depth
+  for (let reflection of reflections) {
+    if (isReflectionVisible(reflection)) {
+      counts[reflection.depth] = (counts[reflection.depth] || 0) + 1;
+    }
+  }
+  
+  return counts;
+}
+
+// Handle puzzle solved
+function puzzleSolved() {
+  isPuzzleSolved = true;
+  
+  // Stop the timer if it's running
+  if (timeLimitInterval) {
+    clearInterval(timeLimitInterval);
+    timeLimitInterval = null;
+  }
+  
+  // Update status in the puzzle panel
+  const statusElement = document.getElementById('puzzleStatus');
+  if (statusElement) {
+    statusElement.innerHTML = `
+      <div class="status-success">PUZZLE SOLVED!</div>
+      <button id="nextPuzzleBtn">Next Puzzle</button>
+    `;
+    
+    // Set up next puzzle button
+    document.getElementById('nextPuzzleBtn').onclick = loadNextPuzzle;
+  }
+}
+
+// Handle puzzle failed
+function puzzleFailed() {
+  isPuzzleFailed = true;
+  
+  // Stop the timer if it's running
+  if (timeLimitInterval) {
+    clearInterval(timeLimitInterval);
+    timeLimitInterval = null;
+  }
+  
+  // Update status in the puzzle panel
+  const statusElement = document.getElementById('puzzleStatus');
+  if (statusElement) {
+    statusElement.innerHTML = `
+      <div class="status-failure">PUZZLE FAILED</div>
+      <button id="retryPuzzleBtn">Try Again</button>
+    `;
+    
+    // Set up retry button
+    document.getElementById('retryPuzzleBtn').onclick = resetPuzzle;
+  }
+}
+
+// Check if the puzzle has a time limit condition
+function hasTimeLimitCondition() {
+  if (!currentPuzzle) return false;
+  
+  // Check single lose condition
+  if (currentPuzzle.loseCondition && currentPuzzle.loseCondition.type === 'timeLimit') {
+    return true;
+  }
+  
+  // Check multiple lose conditions
+  if (currentPuzzle.loseConditions) {
+    return currentPuzzle.loseConditions.some(condition => condition.type === 'timeLimit');
+  }
+  
+  return false;
+}
+
+// Get the time limit in seconds from puzzle conditions
+function getPuzzleTimeLimit() {
+  if (!currentPuzzle) return 0;
+  
+  // Check single lose condition
+  if (currentPuzzle.loseCondition && currentPuzzle.loseCondition.type === 'timeLimit') {
+    return currentPuzzle.loseCondition.seconds;
+  }
+  
+  // Check multiple lose conditions
+  if (currentPuzzle.loseConditions) {
+    const timeCondition = currentPuzzle.loseConditions.find(condition => condition.type === 'timeLimit');
+    if (timeCondition) {
+      return timeCondition.seconds;
+    }
+  }
+  
+  return 0;
+}
+
+// Start the puzzle timer
+function startPuzzleTimer() {
+  // Clear any existing interval
+  if (timeLimitInterval) {
+    clearInterval(timeLimitInterval);
+  }
+  
+  // Get the time limit
+  const timeLimit = getPuzzleTimeLimit();
+  if (!timeLimit) return;
+  
+  // Update timer every second
+  timeLimitInterval = setInterval(() => {
+    // Calculate remaining time
+    const currentTime = new Date().getTime();
+    const elapsedSeconds = Math.floor((currentTime - puzzleStartTime) / 1000);
+    const remainingSeconds = Math.max(0, timeLimit - elapsedSeconds);
+    
+    // Format the time as MM:SS
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+    const timeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Update the timer display
+    const timerElement = document.getElementById('puzzleTimer');
+    if (timerElement) {
+      timerElement.innerHTML = `Time: ${timeDisplay}`;
+      
+      // Highlight timer when time is running low (less than 10 seconds)
+      if (remainingSeconds < 10) {
+        timerElement.classList.add('time-low');
+      } else {
+        timerElement.classList.remove('time-low');
+      }
+    }
+    
+    // Check if time has run out
+    if (remainingSeconds === 0) {
+      clearInterval(timeLimitInterval);
+      
+      // If the puzzle isn't already solved or failed, mark it as failed
+      if (!isPuzzleSolved && !isPuzzleFailed) {
+        puzzleFailed();
+      }
+    }
+  }, 1000);
+}
+
+// Mouse released function
+function mouseReleased() {
+  // Reset dragging state regardless of puzzle state
+  isDragging = false;
+  draggedObject = null;
+  draggedMirrorPoint = null;
+  draggedMirrorIndex = null;
 } 

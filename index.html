@@ -69,7 +69,7 @@
 			background-color: #45a049;
 		}
 		
-		#arrangementControls {
+		#arrangementControls, #puzzleControls {
 			display: flex;
 			justify-content: center;
 			align-items: center;
@@ -77,14 +77,14 @@
 			margin-bottom: 10px;
 		}
 		
-		#arrangementSelect {
+		select {
 			padding: 8px;
 			border-radius: 4px;
 			border: 1px solid #ccc;
 			min-width: 200px;
 		}
 		
-		#refreshArrangements {
+		.refresh-btn {
 			padding: 8px 12px;
 			background-color: #2196F3;
 			color: white;
@@ -94,8 +94,92 @@
 			font-weight: bold;
 		}
 		
-		#refreshArrangements:hover {
+		.refresh-btn:hover {
 			background-color: #0b7dda;
+		}
+		
+		/* Puzzle-specific styles */
+		.puzzle-panel {
+			position: absolute;
+			top: 100px;
+			right: 20px;
+			width: 250px;
+			background-color: rgba(255, 255, 255, 0.9);
+			border-radius: 8px;
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+			padding: 15px;
+			z-index: 100;
+		}
+		
+		.puzzle-panel h3 {
+			margin-top: 0;
+			color: #2196F3;
+		}
+		
+		.puzzle-panel button {
+			margin-top: 10px;
+			width: 100%;
+		}
+		
+		.puzzle-hint {
+			margin-top: 15px;
+			padding: 10px;
+			background-color: #fff3cd;
+			border-left: 4px solid #ffc107;
+			border-radius: 4px;
+		}
+		
+		#puzzleStatus {
+			margin: 10px 0;
+		}
+		
+		.status-success {
+			font-weight: bold;
+			color: #4CAF50;
+			padding: 5px;
+			background-color: #e8f5e9;
+			border-radius: 4px;
+			text-align: center;
+			margin-bottom: 10px;
+		}
+		
+		.status-failure {
+			font-weight: bold;
+			color: #f44336;
+			padding: 5px;
+			background-color: #ffebee;
+			border-radius: 4px;
+			text-align: center;
+			margin-bottom: 10px;
+		}
+		
+		#puzzleBtn {
+			background-color: #ff9800;
+		}
+		
+		#puzzleBtn:hover {
+			background-color: #e68a00;
+		}
+		
+		#puzzleTimer {
+			font-weight: bold;
+			background-color: #e3f2fd;
+			padding: 5px;
+			border-radius: 4px;
+			text-align: center;
+			margin-bottom: 10px;
+		}
+		
+		#puzzleTimer.time-low {
+			background-color: #ffebee;
+			color: #f44336;
+			animation: pulse 1s infinite;
+		}
+		
+		@keyframes pulse {
+			0% { opacity: 1; }
+			50% { opacity: 0.7; }
+			100% { opacity: 1; }
 		}
 	</style>
 </head>
@@ -106,13 +190,21 @@
 		<button id="addMirror">Add Mirror</button>
 		<button id="exportArrangement">Export</button>
 		<button id="resetGame">Reset</button>
+		<button id="puzzleBtn">Puzzles</button>
 	</div>
 	<div id="arrangementControls">
 		<select id="arrangementSelect">
 			<option value="">-- Select Arrangement --</option>
 		</select>
 		<button id="loadArrangement">Load</button>
-		<button id="refreshArrangements" title="Refresh List">↻</button>
+		<button id="refreshArrangements" class="refresh-btn" title="Refresh List">↻</button>
+	</div>
+	<div id="puzzleControls" style="display: none;">
+		<select id="puzzleSelect">
+			<option value="">-- Select Puzzle --</option>
+		</select>
+		<button id="loadPuzzle">Start Puzzle</button>
+		<button id="refreshPuzzles" class="refresh-btn" title="Refresh List">↻</button>
 	</div>
 	<div class="game-container">
 	</div>
@@ -161,13 +253,125 @@
 				});
 		}
 		
+		// Function to populate the puzzle dropdown
+		function loadPuzzlesList() {
+			const select = document.getElementById('puzzleSelect');
+			
+			// Clear existing options except the default one
+			while (select.options.length > 1) {
+				select.remove(1);
+			}
+			
+			// Fetch the directory listing
+			fetch('http://localhost:8000/puzzles/')
+				.then(response => response.text())
+				.then(html => {
+					// Parse the HTML response to find all JSON files
+					const parser = new DOMParser();
+					const doc = parser.parseFromString(html, 'text/html');
+					const links = doc.querySelectorAll('a');
+					
+					// Create an array to store promises for each JSON file
+					const puzzlePromises = [];
+					
+					// Process each JSON file to get its name
+					links.forEach(link => {
+						const href = link.getAttribute('href');
+						// Skip README and non-JSON files
+						if (href && href.toLowerCase().endsWith('.json') && !href.includes('README')) {
+							const fetchPromise = fetch(`http://localhost:8000/puzzles/${href}`)
+								.then(response => response.json())
+								.then(puzzleData => {
+									return {
+										filename: href,
+										name: puzzleData.name,
+										difficulty: puzzleData.difficulty || 'normal'
+									};
+								})
+								.catch(error => {
+									console.error(`Error loading puzzle ${href}:`, error);
+									return {
+										filename: href,
+										name: href.replace('.json', '').replace(/-/g, ' '),
+										difficulty: 'unknown'
+									};
+								});
+							
+							puzzlePromises.push(fetchPromise);
+						}
+					});
+					
+					// Wait for all puzzle files to be processed
+					Promise.all(puzzlePromises)
+						.then(puzzles => {
+							// Sort puzzles by difficulty (easy first, then normal, then hard)
+							puzzles.sort((a, b) => {
+								const difficultyOrder = { 'easy': 1, 'normal': 2, 'hard': 3, 'unknown': 4 };
+								return difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty];
+							});
+							
+							// Add each puzzle to the dropdown
+							puzzles.forEach(puzzle => {
+								const option = document.createElement('option');
+								option.value = puzzle.filename;
+								
+								// Add difficulty indicator if available
+								let displayName = puzzle.name;
+								if (puzzle.difficulty && puzzle.difficulty !== 'normal') {
+									displayName += ` (${puzzle.difficulty.charAt(0).toUpperCase() + puzzle.difficulty.slice(1)})`;
+								}
+								
+								option.textContent = displayName;
+								select.appendChild(option);
+							});
+							
+							console.log(`Found ${puzzles.length} puzzle files`);
+						});
+				})
+				.catch(error => {
+					console.error('Error loading puzzles list:', error);
+					// Add a fallback option
+					const option = document.createElement('option');
+					option.value = "";
+					option.textContent = "Error loading puzzles";
+					select.appendChild(option);
+				});
+		}
+		
 		// Load arrangements when the page loads
-		window.addEventListener('DOMContentLoaded', loadArrangementsList);
+		window.addEventListener('DOMContentLoaded', () => {
+			loadArrangementsList();
+			loadPuzzlesList();
+		});
+		
+		// Toggle between arrangement and puzzle controls
+		document.getElementById('puzzleBtn').addEventListener('click', function() {
+			const arrangementControls = document.getElementById('arrangementControls');
+			const puzzleControls = document.getElementById('puzzleControls');
+			
+			if (arrangementControls.style.display !== 'none') {
+				// Switch to puzzle mode
+				arrangementControls.style.display = 'none';
+				puzzleControls.style.display = 'flex';
+				this.textContent = 'Sandbox';
+			} else {
+				// Switch to sandbox mode
+				arrangementControls.style.display = 'flex';
+				puzzleControls.style.display = 'none';
+				this.textContent = 'Puzzles';
+				
+				// Exit puzzle mode if active
+				if (typeof exitPuzzleMode === 'function') {
+					exitPuzzleMode();
+				}
+			}
+		});
 		
 		// Add refresh button functionality
 		document.getElementById('refreshArrangements').addEventListener('click', loadArrangementsList);
+		document.getElementById('refreshPuzzles').addEventListener('click', loadPuzzlesList);
 		
-		// Setup load button click handler
+		// Setup load arrangement button
 		document.getElementById('loadArrangement').addEventListener('click', function() {
 			const select = document.getElementById('arrangementSelect');
 			const selectedFile = select.value;
@@ -197,6 +401,19 @@
 					});
 			} else {
 				alert('Please select an arrangement file');
+			}
+		});
+		
+		// Setup load puzzle button
+		document.getElementById('loadPuzzle').addEventListener('click', function() {
+			const select = document.getElementById('puzzleSelect');
+			const selectedFile = select.value;
+			
+			if (selectedFile) {
+				// Use the loadPuzzle function from light-detective.js
+				loadPuzzle(selectedFile);
+			} else {
+				alert('Please select a puzzle file');
 			}
 		});
 	</script>
