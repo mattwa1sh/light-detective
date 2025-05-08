@@ -1,60 +1,60 @@
 # Light Detective
 
-A physics-based reflection puzzle game where you experiment with mirrors, light paths, and reflections.
+A physics-based puzzle game about reflections. This game demonstrates how light reflects off mirrors, creating multiple reflections that can be observed from different angles.
 
-## Overview
+## Features
 
-Light Detective is an interactive simulation that demonstrates the physics of light reflections. The game places a ball and mirrors in a scene, with an eye at the bottom of the screen to observe the various reflections created by the mirrors.
+- Place and manipulate a ball and mirrors
+- See reflections in real-time
+- Visualize ray paths for each reflection
+- Export and import arrangements
 
 ## How to Play
 
-1. Open `index.html` in a web browser to start the game
-2. Interact with the game elements:
-   - **Ball**: Click and drag the blue ball to reposition it
-   - **Mirrors**: Drag the endpoints to adjust the angle and position, or drag the middle to move the entire mirror
-   - **Eye**: Drag to change your viewing position
-
-## Game Elements
-
-### Objects
-- **Blue Ball**: The original object being reflected
-- **Mirrors**: Have two sides:
-  - **Blue Side**: Reflective surface that creates reflections
-  - **Black Side**: Non-reflective back side
-
-### Reflections
-The game calculates and displays reflections based on the position of mirrors:
-- **Green Balls**: First-order reflections (reflected once)
-- **Purple Balls**: Second-order reflections (reflected twice)
-- **Orange Balls**: Third-order reflections (reflected three times)
-- **Teal Balls**: Fourth-order reflections (reflected four times)
-- **Red Balls**: Higher-order reflections (reflected five or more times)
-
-### Ray Paths
-Ray paths show how light travels from the eye, to mirrors, and to the ball:
-- Use the **Cycle Rays** button to cycle through visible reflections
-- Use the **Hide Rays** button to hide all ray paths
-- Ray colors match their corresponding reflection orders (green for first-order, etc.)
-- Each ray accurately traces the path light would follow, showing:
-  - Where it hits each mirror surface
-  - The proper angles of incidence and reflection
-  - The complete path from eye to ball
-
-## Physics Features
-- **Reflection Visibility**: Only reflections visible from the eye's position are shown
-- **Canvas Boundaries**: Reflections outside the canvas area are not shown
-- **Scaling**: Reflections get smaller based on distance from the original ball
-- **Partial Mirror Visibility**: Only portions of mirrors directly visible to the eye can create reflections
+1. **Open the game**: Simply open index.html in a modern web browser
+2. **Interact with objects**:
+   - Drag the blue ball to move it
+   - Drag mirrors by their endpoints or middle to reposition them
+   - Drag the eye to change the viewing position
 
 ## Controls
-- **Cycle Rays**: Shows ray paths one at a time, cycling through all visible reflections
-- **Hide Rays**: Turns off all ray path visibility
-- **Add Mirror**: Adds a new mirror to the scene
-- **Reset**: Randomizes the game with new positions for the ball and mirrors
 
-## Development
-This game is built using:
-- HTML5 for structure
-- CSS for styling
-- p5.js for canvas operations and drawing
-- JavaScript for physics calculations and interactivity 
+- **Reset**: Randomizes the ball and mirror positions
+- **Cycle Rays**: Cycles through visualization of different reflection ray paths
+- **Hide Rays**: Hides all ray visualizations
+- **Add Mirror**: Adds a new mirror to the scene
+- **Export**: Saves the current arrangement to a JSON file
+- **Import**: Loads a previously saved arrangement from your computer
+
+## Export/Import Functionality
+
+### Exporting Arrangements
+
+Click the "Export" button to save the current state of the game to a JSON file. The file will be saved with a timestamp in the filename.
+
+### Importing Arrangements
+
+1. Click the "Import" button to open a file selection dialog
+2. Select a previously exported JSON arrangement file
+3. The arrangement will be loaded immediately
+
+## How It Works
+
+- Blue side of mirrors reflects light
+- Black side of mirrors does not reflect light
+- Green balls show first-order reflections
+- Purple balls show second-order reflections
+- Orange balls show third-order reflections
+- Reflections are only shown if they would be visible from the eye's position
+
+## Technical Details
+
+The game is built using:
+- JavaScript and p5.js for rendering
+- HTML/CSS for the user interface
+- Browser's File API for importing/exporting arrangements
+
+Arrangements are stored as JSON files containing:
+- Ball position and size
+- Eye position
+- Mirror positions, orientations, and properties 

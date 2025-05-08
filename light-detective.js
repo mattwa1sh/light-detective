@@ -213,7 +213,7 @@ function exportArrangement() {
   a.href = url;
   
   // Set download path to include arrangements folder
-  a.download = `arrangements/${filename}`;
+  a.download = filename;
   
   // Append to the body, click, and clean up
   document.body.appendChild(a);
@@ -223,14 +223,13 @@ function exportArrangement() {
   // Clean up the URL object
   URL.revokeObjectURL(url);
   
-  console.log(`Exported arrangement to arrangements/${filename}`);
+  console.log(`Exported arrangement to ${filename}`);
 }
 
 // Function to import an arrangement from a JSON file
-function importArrangement(jsonData) {
+function importArrangement(arrangement) {
   try {
-    // Parse the JSON data
-    const arrangement = JSON.parse(jsonData);
+    // No need to parse the JSON again, the data is already an object
     
     // Import ball data
     ball = {

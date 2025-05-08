@@ -68,6 +68,35 @@
 		button:hover {
 			background-color: #45a049;
 		}
+		
+		#arrangementControls {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			gap: 10px;
+			margin-bottom: 10px;
+		}
+		
+		#arrangementSelect {
+			padding: 8px;
+			border-radius: 4px;
+			border: 1px solid #ccc;
+			min-width: 200px;
+		}
+		
+		#refreshArrangements {
+			padding: 8px 12px;
+			background-color: #2196F3;
+			color: white;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+			font-weight: bold;
+		}
+		
+		#refreshArrangements:hover {
+			background-color: #0b7dda;
+		}
 	</style>
 </head>
 <body>
@@ -78,7 +107,98 @@
 		<button id="exportArrangement">Export</button>
 		<button id="resetGame">Reset</button>
 	</div>
+	<div id="arrangementControls">
+		<select id="arrangementSelect">
+			<option value="">-- Select Arrangement --</option>
+		</select>
+		<button id="loadArrangement">Load</button>
+		<button id="refreshArrangements" title="Refresh List">↻</button>
+	</div>
 	<div class="game-container">
 	</div>
+	
+	<script>
+		// Function to populate the dropdown with all JSON files from the arrangements folder
+		function loadArrangementsList() {
+			const select = document.getElementById('arrangementSelect');
+			
+			// Clear existing options except the default one
+			while (select.options.length > 1) {
+				select.remove(1);
+			}
+			
+			// Fetch the directory listing
+			fetch('http://localhost:8000/arrangements/')
+				.then(response => response.text())
+				.then(html => {
+					// Parse the HTML response to find all JSON files
+					const parser = new DOMParser();
+					const doc = parser.parseFromString(html, 'text/html');
+					const links = doc.querySelectorAll('a');
+					
+					let count = 0;
+					links.forEach(link => {
+						const href = link.getAttribute('href');
+						// Check if it's a JSON file
+						if (href && href.toLowerCase().endsWith('.json')) {
+							const option = document.createElement('option');
+							option.value = href;
+							option.textContent = href;
+							select.appendChild(option);
+							count++;
+						}
+					});
+					
+					console.log(`Found ${count} arrangement files`);
+				})
+				.catch(error => {
+					console.error('Error loading arrangements list:', error);
+					// Add a fallback option
+					const option = document.createElement('option');
+					option.value = "";
+					option.textContent = "Error loading arrangements";
+					select.appendChild(option);
+				});
+		}
+		
+		// Load arrangements when the page loads
+		window.addEventListener('DOMContentLoaded', loadArrangementsList);
+		
+		// Add refresh button functionality
+		document.getElementById('refreshArrangements').addEventListener('click', loadArrangementsList);
+		
+		// Setup load button click handler
+		document.getElementById('loadArrangement').addEventListener('click', function() {
+			const select = document.getElementById('arrangementSelect');
+			const selectedFile = select.value;
+			
+			if (selectedFile) {
+				const url = `http://localhost:8000/arrangements/${selectedFile}`;
+				console.log(`Fetching from: ${url}`);
+				
+				fetch(url)
+					.then(response => {
+						if (!response.ok) {
+							throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+						}
+						return response.json(); // Parse as JSON instead of text
+					})
+					.then(data => {
+						// Use the importArrangement function to apply the arrangement
+						const success = importArrangement(data);
+						if (success) {
+							console.log("Arrangement loaded successfully");
+						} else {
+							console.error("Failed to import arrangement");
+						}
+					})
+					.catch(error => {
+						alert(`Error: ${error.message}`);
+					});
+			} else {
+				alert('Please select an arrangement file');
+			}
+		});
+	</script>
 </body>
 </html>
