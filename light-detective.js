@@ -553,32 +553,32 @@ function drawRayPaths() {
   // Color based on reflection depth/order
   let strokeColor;
   switch (currentReflection.depth) {
-    case 1:
-      // First-order paths - Green
+      case 1:
+        // First-order paths - Green
       strokeColor = color(50, 200, 100, 220);
-      break;
-    case 2:
-      // Second-order paths - Purple
+        break;
+      case 2:
+        // Second-order paths - Purple
       strokeColor = color(180, 100, 255, 220);
-      break;
-    case 3:
-      // Third-order paths - Orange
+        break;
+      case 3:
+        // Third-order paths - Orange
       strokeColor = color(255, 150, 50, 220);
-      break;
-    case 4:
-      // Fourth-order paths - Teal
+        break;
+      case 4:
+        // Fourth-order paths - Teal
       strokeColor = color(0, 200, 200, 220);
-      break;
-    default:
-      // Higher orders - Red
+        break;
+      default:
+        // Higher orders - Red
       strokeColor = color(255, 100, 100, 220);
-      break;
-  }
-  
+        break;
+    }
+    
   // Prepare stroke settings
   stroke(strokeColor);
   strokeWeight(3);
-  noFill();
+    noFill();
   
   // SPECIAL CASE: First-order reflection (single mirror)
   if (currentReflection.depth === 1) {
@@ -596,7 +596,7 @@ function drawRayPaths() {
     if (hitPoint) {
       // Draw solid line from eye to hit point
       line(eyePosition.x, eyePosition.y, hitPoint.x, hitPoint.y);
-      
+  
       // Draw dashed line from hit point to virtual image
       drawDashedLine(
         hitPoint.x, hitPoint.y,
@@ -608,8 +608,8 @@ function drawRayPaths() {
       line(hitPoint.x, hitPoint.y, ball.x, ball.y);
       
       // Draw hit point
-      fill(255);
-      noStroke();
+  fill(255);
+  noStroke();
       ellipse(hitPoint.x, hitPoint.y, 8, 8);
     }
     
@@ -629,7 +629,7 @@ function drawRayPaths() {
   
   // Reverse to order from ball to eye
   reflectionChain.reverse();
-  
+    
   // Collect hit points and virtual images
   const hitPoints = [];
   
@@ -886,14 +886,14 @@ function traceSingleRayPath(reflection) {
   // For higher-order reflections, we need to trace the entire path
   else {
     // Get the chain of reflections
-    let reflectionChain = [];
-    let currentReflection = reflection;
-    
-    while (currentReflection) {
-      reflectionChain.push(currentReflection);
-      currentReflection = currentReflection.parentReflection;
-    }
-    
+  let reflectionChain = [];
+  let currentReflection = reflection;
+  
+  while (currentReflection) {
+    reflectionChain.push(currentReflection);
+    currentReflection = currentReflection.parentReflection;
+  }
+  
     // Reverse the chain to go from ball to eye
     reflectionChain.reverse();
     
@@ -906,7 +906,7 @@ function traceSingleRayPath(reflection) {
     virtualImages.push(lastPoint);
     
     // Process each mirror in sequence
-    for (let i = 0; i < reflectionChain.length; i++) {
+  for (let i = 0; i < reflectionChain.length; i++) {
       const mirror = reflectionChain[i].sourceMirror;
       
       // Calculate normal to this mirror
@@ -919,7 +919,7 @@ function traceSingleRayPath(reflection) {
         x: -mirrorVec.y / mirrorLength,
         y: mirrorVec.x / mirrorLength
       };
-      
+    
       // For first mirror in chain, find hit point using ball and eye
       let hitPoint;
       
@@ -943,9 +943,9 @@ function traceSingleRayPath(reflection) {
           hitPoint = lineIntersection(
             eyePosition.x, eyePosition.y,
             virtualImage.x, virtualImage.y,
-            mirror.x1, mirror.y1,
-            mirror.x2, mirror.y2
-          );
+    mirror.x1, mirror.y1, 
+    mirror.x2, mirror.y2
+  );
         } else {
           // More mirrors - need to find next mirror's hit point first
           // (we'll do this later in a second pass)
@@ -966,7 +966,7 @@ function traceSingleRayPath(reflection) {
         virtualImages.push(virtualImage);
         
         // Find where line from next point to virtual image intersects mirror
-        if (i === reflectionChain.length - 1) {
+    if (i === reflectionChain.length - 1) {
           // Last mirror - next point is eye
           hitPoint = lineIntersection(
             eyePosition.x, eyePosition.y,
@@ -1540,8 +1540,8 @@ function canMoveObjects() {
   // 1. We have a valid puzzle loaded AND
   // 2. The puzzle is not yet solved or failed
   return currentPuzzle && !(isPuzzleSolved || isPuzzleFailed);
-}
-
+  }
+  
 // Override mouseDragged to check if objects can be moved
 mouseDragged = function() {
   // If not dragging anything, no need to proceed
@@ -1567,22 +1567,22 @@ mouseDragged = function() {
   else if (draggedObject === 'mirror') {
     if (draggedMirrorPoint) {
       // Get the mirror being dragged by endpoint
-      const mirror = mirrors[draggedMirrorPoint.index];
+    const mirror = mirrors[draggedMirrorPoint.index];
     
       // Update the appropriate endpoint of the center line
-      if (draggedMirrorPoint.point === 1) {
-        mirror.x1 = mouseX;
-        mirror.y1 = mouseY;
-      } else {
-        mirror.x2 = mouseX;
-        mirror.y2 = mouseY;
-      }
+    if (draggedMirrorPoint.point === 1) {
+      mirror.x1 = mouseX;
+      mirror.y1 = mouseY;
+    } else {
+      mirror.x2 = mouseX;
+      mirror.y2 = mouseY;
+    }
     
-      // Keep endpoints within canvas bounds
-      mirror.x1 = constrain(mirror.x1, 0, width);
-      mirror.y1 = constrain(mirror.y1, 0, height);
-      mirror.x2 = constrain(mirror.x2, 0, width);
-      mirror.y2 = constrain(mirror.y2, 0, height);
+    // Keep endpoints within canvas bounds
+    mirror.x1 = constrain(mirror.x1, 0, width);
+    mirror.y1 = constrain(mirror.y1, 0, height);
+    mirror.x2 = constrain(mirror.x2, 0, width);
+    mirror.y2 = constrain(mirror.y2, 0, height);
       
       // Recalculate the mirror's normal vector
       const mirrorVector = { 
@@ -1731,7 +1731,7 @@ mousePressed = function() {
             draggedMirrorPoint = {index: i, point: 2};
             draggedMirrorIndex = null;
           } else {
-            draggedMirrorPoint = null;
+  draggedMirrorPoint = null;
             draggedMirrorIndex = i;
           }
         }
@@ -1768,7 +1768,7 @@ mousePressed = function() {
         isDragging = true;
         draggedObject = 'mirror';
         draggedMirrorPoint = {index: i, point: 1};
-        draggedMirrorIndex = null;
+  draggedMirrorIndex = null;
         return;
       }
       

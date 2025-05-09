@@ -14,22 +14,22 @@
   },
   "loseCondition": null,
   "randomize": {
-    "mirrors": {
-      "position": true,
-      "rotation": true,
-      "size": {
-        "min": 150,
-        "max": 300
-      },
-      "width": {
-        "min": 3,
-        "max": 6
-      },
-      "region": {
-        "x": 50,
-        "y": 50,
-        "width": 1150,
-        "height": 600
+  "mirrors": {
+    "position": true,
+    "rotation": true,
+    "size": {
+      "min": 150,
+      "max": 300
+    },
+    "width": {
+      "min": 3,
+      "max": 6
+    },
+    "region": {
+      "x": 50,
+      "y": 50,
+      "width": 1150,
+      "height": 600
       }
     }
   },
