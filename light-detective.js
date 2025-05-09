@@ -1669,6 +1669,24 @@ mousePressed = function() {
     return;
   }
   
+  // First check if we're in ray-cycling mode and clicked on a reflection
+  if (showRayPaths) {
+    // Check each visible reflection
+    for (let i = 0; i < reflections.length; i++) {
+      const reflection = reflections[i];
+      // Only check visible reflections
+      if (!isReflectionVisible(reflection)) continue;
+      
+      // Check if mouse is within the reflection's circle
+      if (dist(mouseX, mouseY, reflection.x, reflection.y) < reflection.radius) {
+        // Show rays for this reflection
+        currentRayIndex = i;
+        return; // Exit early since we handled the click
+      }
+    }
+  }
+  
+  // If we didn't click a reflection, handle regular dragging logic
   // In puzzle mode, check which objects are movable
   if (isPuzzleMode && currentPuzzle) {
     const movable = currentPuzzle.movableObjects;
