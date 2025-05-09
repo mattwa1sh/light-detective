@@ -550,10 +550,6 @@ function drawRayPaths() {
   // Get the current reflection after potential adjustment
   const currentReflection = reflections[currentRayIndex];
   
-  // Trace the path for this reflection
-  let paths = traceSingleRayPath(currentReflection);
-  if (!paths || !paths.physical || paths.physical.length < 2) return;
-  
   // Color based on reflection depth/order
   let strokeColor;
   switch (currentReflection.depth) {
@@ -579,40 +575,137 @@ function drawRayPaths() {
       break;
   }
   
-  // Draw the physical path (solid lines) - the actual photon path
+  // Prepare stroke settings
   stroke(strokeColor);
   strokeWeight(3);
   noFill();
   
-  // Draw physical path segments one by one
-  for (let i = 0; i < paths.physical.length - 1; i++) {
-    line(paths.physical[i].x, paths.physical[i].y, 
-         paths.physical[i+1].x, paths.physical[i+1].y);
-  }
-  
-  // Draw the virtual path (includes dashed lines) - what the eye "sees"
-  if (paths.virtual && paths.virtual.length >= 2) {
-    for (let i = 0; i < paths.virtual.length - 1; i++) {
-      const pt1 = paths.virtual[i];
-      const pt2 = paths.virtual[i+1];
+  // SPECIAL CASE: First-order reflection (single mirror)
+  if (currentReflection.depth === 1) {
+    const mirror = currentReflection.sourceMirror;
+    
+    // 1. Draw line from eye to virtual image
+    // Find where this line intersects the mirror
+    const hitPoint = lineIntersection(
+      eyePosition.x, eyePosition.y,
+      currentReflection.x, currentReflection.y,
+      mirror.x1, mirror.y1,
+      mirror.x2, mirror.y2
+    );
+    
+    if (hitPoint) {
+      // Draw solid line from eye to hit point
+      line(eyePosition.x, eyePosition.y, hitPoint.x, hitPoint.y);
       
-      if (pt2.type === 'dashed') {
-        // Draw dashed line for the segment that passes through the mirror
-        drawDashedLine(pt1.x, pt1.y, pt2.x, pt2.y, strokeColor, 5, 5);
-      } else {
-        // Draw solid line for the segment from eye to mirror
-        stroke(strokeColor);
-        line(pt1.x, pt1.y, pt2.x, pt2.y);
-      }
+      // Draw dashed line from hit point to virtual image
+      drawDashedLine(
+        hitPoint.x, hitPoint.y,
+        currentReflection.x, currentReflection.y,
+        strokeColor, 5, 5
+      );
+      
+      // Draw solid line from hit point to ball
+      line(hitPoint.x, hitPoint.y, ball.x, ball.y);
+      
+      // Draw hit point
+      fill(255);
+      noStroke();
+      ellipse(hitPoint.x, hitPoint.y, 8, 8);
     }
+    
+    // Done with first-order
+    return;
   }
   
-  // Draw dots at the hit points (where rays hit mirrors)
+  // GENERAL CASE: Higher-order reflections (multiple mirrors)
+  // Build the complete chain of reflections
+  const reflectionChain = [];
+  let current = currentReflection;
+  
+  while (current) {
+    reflectionChain.push(current);
+    current = current.parentReflection;
+  }
+  
+  // Reverse to order from ball to eye
+  reflectionChain.reverse();
+  
+  // Collect hit points and virtual images
+  const hitPoints = [];
+  
+  // STEP 1: Start from the eye, find the first hit point
+  const lastMirror = reflectionChain[reflectionChain.length - 1].sourceMirror;
+  const lastVirtualImage = reflectionChain[reflectionChain.length - 1];
+  
+  // Find where line from eye to virtual image hits the mirror
+  const firstHitPoint = lineIntersection(
+    eyePosition.x, eyePosition.y,
+    lastVirtualImage.x, lastVirtualImage.y,
+    lastMirror.x1, lastMirror.y1,
+    lastMirror.x2, lastMirror.y2
+  );
+  
+  if (!firstHitPoint) return; // Can't find first hit point, exit
+  
+  // Add the first hit point
+  hitPoints.push(firstHitPoint);
+  
+  // Draw solid line: eye to first hit point
+  line(eyePosition.x, eyePosition.y, firstHitPoint.x, firstHitPoint.y);
+  
+  // Draw dashed line: first hit point to virtual image
+  drawDashedLine(
+    firstHitPoint.x, firstHitPoint.y,
+    lastVirtualImage.x, lastVirtualImage.y,
+    strokeColor, 5, 5
+  );
+  
+  // STEP 2: For each reflection in the chain (working backwards)
+  // Find the hit point on its mirror and draw appropriate lines
+  let previousHitPoint = firstHitPoint;
+  
+  for (let i = reflectionChain.length - 2; i >= 0; i--) {
+    const currentReflectionInChain = reflectionChain[i];
+    const currentMirror = currentReflectionInChain.sourceMirror;
+    
+    // Find where line from previous hit point to this reflection's virtual image 
+    // intersects with this mirror
+    const hitPoint = lineIntersection(
+      previousHitPoint.x, previousHitPoint.y,
+      currentReflectionInChain.x, currentReflectionInChain.y,
+      currentMirror.x1, currentMirror.y1,
+      currentMirror.x2, currentMirror.y2
+    );
+    
+    if (!hitPoint) continue; // Skip if can't find hit point
+    
+    // Add this hit point
+    hitPoints.push(hitPoint);
+    
+    // Draw solid line: previous hit point to this hit point
+    line(previousHitPoint.x, previousHitPoint.y, hitPoint.x, hitPoint.y);
+    
+    // Draw dashed line: this hit point to virtual image
+    drawDashedLine(
+      hitPoint.x, hitPoint.y,
+      currentReflectionInChain.x, currentReflectionInChain.y,
+      strokeColor, 5, 5
+    );
+    
+    // Update previous hit point for next iteration
+    previousHitPoint = hitPoint;
+  }
+  
+  // Finally, draw line from last hit point to ball
+  if (hitPoints.length > 0) {
+    line(hitPoints[hitPoints.length - 1].x, hitPoints[hitPoints.length - 1].y, ball.x, ball.y);
+  }
+  
+  // Draw white dots at all hit points
   fill(255);
   noStroke();
-  // Only draw dots at the middle point(s) - skip ball and eye
-  for (let i = 1; i < paths.physical.length - 1; i++) {
-    ellipse(paths.physical[i].x, paths.physical[i].y, 8, 8);
+  for (const hp of hitPoints) {
+    ellipse(hp.x, hp.y, 8, 8);
   }
   
   // Display information about the current reflection
@@ -626,6 +719,86 @@ function drawRayPaths() {
   if (currentReflection.depth > 3) orderText = currentReflection.depth + "th";
   
   text(orderText + " order reflection (" + (currentRayIndex + 1) + " of " + reflections.length + ")", 20, 20);
+}
+
+// Helper function to find a hit point on a mirror that obeys the law of reflection
+function findHitPoint(source, destination, virtualImage, mirror) {
+  // First, try the intersection of source-virtualImage line with the mirror
+  // This is the correct hit point for simple first-order reflections
+  const hitPoint = lineIntersection(
+    source.x, source.y,
+    virtualImage.x, virtualImage.y,
+    mirror.x1, mirror.y1,
+    mirror.x2, mirror.y2
+  );
+  
+  if (hitPoint) return hitPoint;
+  
+  // Second approach: try line from eye to virtual image
+  const hitPoint2 = lineIntersection(
+    eyePosition.x, eyePosition.y,
+    virtualImage.x, virtualImage.y,
+    mirror.x1, mirror.y1,
+    mirror.x2, mirror.y2
+  );
+  
+  if (hitPoint2) return hitPoint2;
+  
+  // Third approach: try source-destination midpoint to virtual image
+  const midpoint = {
+    x: (source.x + destination.x) / 2,
+    y: (source.y + destination.y) / 2
+  };
+  
+  const hitPoint3 = lineIntersection(
+    midpoint.x, midpoint.y,
+    virtualImage.x, virtualImage.y,
+    mirror.x1, mirror.y1,
+    mirror.x2, mirror.y2
+  );
+  
+  if (hitPoint3) return hitPoint3;
+  
+  // Last resort: just return a point on the mirror
+  return {
+    x: (mirror.x1 + mirror.x2) / 2,
+    y: (mirror.y1 + mirror.y2) / 2
+  };
+}
+
+// Helper function to build the reflection chain from eye to ball
+function buildReflectionChain(reflection) {
+  const chain = [];
+  let current = reflection;
+  
+  while (current) {
+    chain.push(current);
+    current = current.parentReflection;
+  }
+  
+  // Return the chain in reverse order (ball to eye)
+  return chain.reverse();
+}
+
+// Helper function to create a virtual image of a point reflected in a mirror
+function createVirtualImage(point, mirror) {
+  // Get the mirror normal
+  const mirrorNormal = mirror.normal;
+  
+  // Calculate the reflection of the point
+  const pointToMirrorVec = {
+    x: point.x - mirror.x1,
+    y: point.y - mirror.y1
+  };
+  
+  // Project the vector onto the normal to get the displacement from the mirror
+  const normalDistance = dotProduct(pointToMirrorVec, mirrorNormal);
+  
+  // Reflect the point across the mirror by moving it twice the distance in the normal direction
+  return {
+    x: point.x - 2 * normalDistance * mirrorNormal.x,
+    y: point.y - 2 * normalDistance * mirrorNormal.y
+  };
 }
 
 // Helper function to draw a dashed line
@@ -661,7 +834,7 @@ function drawDashedLine(x1, y1, x2, y2, strokeColor, dashLength, gapLength) {
 // Function to trace a single ray path from the ball to the eye via reflections
 function traceSingleRayPath(reflection) {
   let physicalPath = [];
-  let virtualPath = [];
+  let virtualPaths = []; // Array to store multiple virtual paths for each reflection
   
   // For first-order reflections, we use a direct approach:
   if (!reflection.parentReflection) {
@@ -690,7 +863,6 @@ function traceSingleRayPath(reflection) {
     };
     
     // 4. Find where the line from eye to virtual ball intersects the mirror
-    // This is the exact reflection point that obeys the law of reflection
     const hitPoint = lineIntersection(
       eyePosition.x, eyePosition.y,
       virtualBall.x, virtualBall.y,
@@ -699,50 +871,19 @@ function traceSingleRayPath(reflection) {
     );
     
     if (hitPoint) {
-      // Debug: Verify that angle of incidence equals angle of reflection
-      const incidentVector = {
-        x: hitPoint.x - ball.x,
-        y: hitPoint.y - ball.y
-      };
-      const reflectedVector = {
-        x: eyePosition.x - hitPoint.x,
-        y: eyePosition.y - hitPoint.y
-      };
-      
-      // Normalize vectors
-      const incidentLength = Math.sqrt(incidentVector.x * incidentVector.x + incidentVector.y * incidentVector.y);
-      const reflectedLength = Math.sqrt(reflectedVector.x * reflectedVector.x + reflectedVector.y * reflectedVector.y);
-      
-      const normalizedIncident = {
-        x: incidentVector.x / incidentLength,
-        y: incidentVector.y / incidentLength
-      };
-      
-      const normalizedReflected = {
-        x: reflectedVector.x / reflectedLength,
-        y: reflectedVector.y / reflectedLength
-      };
-      
-      // Dot products with normal
-      const incidentDot = normalizedIncident.x * normal.x + normalizedIncident.y * normal.y;
-      const reflectedDot = normalizedReflected.x * normal.x + normalizedReflected.y * normal.y;
-      
-      console.log("Incident dot:", incidentDot);
-      console.log("Reflected dot:", reflectedDot);
-      console.log("Angle difference:", Math.abs(incidentDot + reflectedDot));
-      
       // 5. Construct the physical path: ball → hit point → eye
       physicalPath.push({ x: ball.x, y: ball.y, type: 'solid' });
       physicalPath.push({ x: hitPoint.x, y: hitPoint.y, type: 'solid' });
       physicalPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
       
-      // 6. Construct the virtual path: eye → hit point → virtual ball (dashed)
-      virtualPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
-      virtualPath.push({ x: hitPoint.x, y: hitPoint.y, type: 'solid' });
-      virtualPath.push({ x: virtualBall.x, y: virtualBall.y, type: 'dashed' });
+      // 6. Construct the virtual path: hit point → virtual ball (dashed)
+      virtualPaths.push([
+        { x: hitPoint.x, y: hitPoint.y, type: 'solid' },
+        { x: virtualBall.x, y: virtualBall.y, type: 'dashed' }
+      ]);
     }
   }
-  // For higher-order reflections, we first calculate the final virtual image
+  // For higher-order reflections, we need to trace the entire path
   else {
     // Get the chain of reflections
     let reflectionChain = [];
@@ -750,16 +891,21 @@ function traceSingleRayPath(reflection) {
     
     while (currentReflection) {
       reflectionChain.push(currentReflection);
-      if (!currentReflection.parentReflection) break;
       currentReflection = currentReflection.parentReflection;
     }
     
-    // Reverse the chain to go from original ball to eye
+    // Reverse the chain to go from ball to eye
     reflectionChain.reverse();
     
-    // Calculate the final virtual image by reflecting the ball through all mirrors in sequence
-    let virtualObject = { x: ball.x, y: ball.y };
+    // Calculate all physical hit points and virtual images
+    let hitPoints = [];
+    let virtualImages = [];
     
+    // Start with the ball
+    let lastPoint = { x: ball.x, y: ball.y };
+    virtualImages.push(lastPoint);
+    
+    // Process each mirror in sequence
     for (let i = 0; i < reflectionChain.length; i++) {
       const mirror = reflectionChain[i].sourceMirror;
       
@@ -774,93 +920,190 @@ function traceSingleRayPath(reflection) {
         y: mirrorVec.x / mirrorLength
       };
       
-      // Reflect the virtual object across this mirror
-      const objToMirrorX = virtualObject.x - mirror.x1;
-      const objToMirrorY = virtualObject.y - mirror.y1;
-      const dotProduct = objToMirrorX * normal.x + objToMirrorY * normal.y;
+      // For first mirror in chain, find hit point using ball and eye
+      let hitPoint;
       
-      virtualObject = {
-        x: virtualObject.x - 2 * dotProduct * normal.x,
-        y: virtualObject.y - 2 * dotProduct * normal.y
-      };
-    }
-    
-    // Now we have the final virtual image, trace backwards to find all physical bounce points
-    let hitPoints = [];
-    let lastPoint = null;
-    
-    // Start from the eye looking at the final virtual image
-    // and find where this line intersects the last mirror
-    const lastMirror = reflectionChain[reflectionChain.length - 1].sourceMirror;
-    
-    const firstHitPoint = lineIntersection(
-      eyePosition.x, eyePosition.y,
-      virtualObject.x, virtualObject.y,
-      lastMirror.x1, lastMirror.y1,
-      lastMirror.x2, lastMirror.y2
-    );
-    
-    if (firstHitPoint) {
-      hitPoints.unshift(firstHitPoint);
-      lastPoint = firstHitPoint;
-      
-      // Work backwards through the reflection chain
-      for (let i = reflectionChain.length - 2; i >= 0; i--) {
-        const mirror = reflectionChain[i].sourceMirror;
+      if (i === 0) {
+        // First mirror - find intersection between ball-mirror-eye
+        // Calculate virtual image of ball in this mirror
+        const objToMirrorX = lastPoint.x - mirror.x1;
+        const objToMirrorY = lastPoint.y - mirror.y1;
+        const dotProduct = objToMirrorX * normal.x + objToMirrorY * normal.y;
         
-        // Calculate the normal to this mirror
-        const mirrorVec = {
-          x: mirror.x2 - mirror.x1,
-          y: mirror.y2 - mirror.y1
-        };
-        const mirrorLength = Math.sqrt(mirrorVec.x * mirrorVec.x + mirrorVec.y * mirrorVec.y);
-        const normal = {
-          x: -mirrorVec.y / mirrorLength,
-          y: mirrorVec.x / mirrorLength
-        };
-        
-        // Reflect the last hit point across the next mirror
-        const lastToMirrorX = lastPoint.x - mirror.x1;
-        const lastToMirrorY = lastPoint.y - mirror.y1;
-        const dotProduct = lastToMirrorX * normal.x + lastToMirrorY * normal.y;
-        
-        const reflectedLast = {
+        const virtualImage = {
           x: lastPoint.x - 2 * dotProduct * normal.x,
           y: lastPoint.y - 2 * dotProduct * normal.y
         };
         
-        // Find where the line from ball to reflectedLast intersects the current mirror
-        const hitPoint = lineIntersection(
-          ball.x, ball.y,
-          reflectedLast.x, reflectedLast.y,
-          mirror.x1, mirror.y1,
-          mirror.x2, mirror.y2
-        );
+        virtualImages.push(virtualImage);
         
-        if (hitPoint) {
-          hitPoints.unshift(hitPoint);
-          lastPoint = hitPoint;
+        // Find where line from next point to virtual image intersects mirror
+        if (reflectionChain.length === 1) {
+          // Only one mirror - next point is eye
+          hitPoint = lineIntersection(
+            eyePosition.x, eyePosition.y,
+            virtualImage.x, virtualImage.y,
+            mirror.x1, mirror.y1,
+            mirror.x2, mirror.y2
+          );
+        } else {
+          // More mirrors - need to find next mirror's hit point first
+          // (we'll do this later in a second pass)
+          hitPoint = createPointOnMirror(mirror, 0.5); // Temporary point on mirror
+        }
+      } else {
+        // Not first mirror - use previous hit point and next point
+        // Calculate virtual image of previous hit point in this mirror
+        const objToMirrorX = lastPoint.x - mirror.x1;
+        const objToMirrorY = lastPoint.y - mirror.y1;
+        const dotProduct = objToMirrorX * normal.x + objToMirrorY * normal.y;
+        
+        const virtualImage = {
+          x: lastPoint.x - 2 * dotProduct * normal.x,
+          y: lastPoint.y - 2 * dotProduct * normal.y
+        };
+        
+        virtualImages.push(virtualImage);
+        
+        // Find where line from next point to virtual image intersects mirror
+        if (i === reflectionChain.length - 1) {
+          // Last mirror - next point is eye
+          hitPoint = lineIntersection(
+            eyePosition.x, eyePosition.y,
+            virtualImage.x, virtualImage.y,
+            mirror.x1, mirror.y1,
+            mirror.x2, mirror.y2
+          );
+        } else {
+          // More mirrors - need to find next mirror's hit point first
+          // (we'll do this later in a second pass)
+          hitPoint = createPointOnMirror(mirror, 0.5); // Temporary point on mirror
         }
       }
       
-      // Construct the physical path
+      if (hitPoint) {
+        hitPoints.push(hitPoint);
+        lastPoint = hitPoint;
+      } else {
+        break; // Error - can't find hit point
+      }
+    }
+    
+    // Second pass - fix all hit points starting from the eye
+    if (hitPoints.length === reflectionChain.length) {
+      // Start with the last hit point (already correctly placed near eye)
+      let currentPoint = hitPoints[hitPoints.length - 1];
+      
+      // Work backwards from second-to-last hit point
+      for (let i = reflectionChain.length - 2; i >= 0; i--) {
+        const mirror = reflectionChain[i + 1].sourceMirror;
+        const prevMirror = reflectionChain[i].sourceMirror;
+        
+        // Calculate virtual image of current hit point in previous mirror
+        const normal = mirrorNormal(prevMirror);
+        
+        const pointToMirrorX = currentPoint.x - prevMirror.x1;
+        const pointToMirrorY = currentPoint.y - prevMirror.y1;
+        const dotProduct = pointToMirrorX * normal.x + pointToMirrorY * normal.y;
+        
+        const virtualPoint = {
+          x: currentPoint.x - 2 * dotProduct * normal.x,
+          y: currentPoint.y - 2 * dotProduct * normal.y
+        };
+        
+        // Find where line from virtual point to previous point intersects mirror
+        const prevHitPoint = lineIntersection(
+          virtualPoint.x, virtualPoint.y,
+          i === 0 ? ball.x : hitPoints[i - 1].x,
+          i === 0 ? ball.y : hitPoints[i - 1].y,
+          prevMirror.x1, prevMirror.y1,
+          prevMirror.x2, prevMirror.y2
+        );
+        
+        if (prevHitPoint) {
+          hitPoints[i] = prevHitPoint;
+          currentPoint = prevHitPoint;
+        } else {
+          break; // Error - can't find hit point
+        }
+      }
+      
+      // Create the physical path
       physicalPath.push({ x: ball.x, y: ball.y, type: 'solid' });
       
       for (const hitPoint of hitPoints) {
         physicalPath.push({ x: hitPoint.x, y: hitPoint.y, type: 'solid' });
       }
       
-      // Add eye as final point
       physicalPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
       
-      // Construct the virtual path
-      virtualPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
-      virtualPath.push({ x: hitPoints[hitPoints.length - 1].x, y: hitPoints[hitPoints.length - 1].y, type: 'solid' });
-      virtualPath.push({ x: virtualObject.x, y: virtualObject.y, type: 'dashed' });
+      // Create virtual paths for each hit point
+      // First mirror
+      virtualPaths.push([
+        { x: hitPoints[0].x, y: hitPoints[0].y, type: 'solid' },
+        { x: virtualImages[1].x, y: virtualImages[1].y, type: 'dashed' }
+      ]);
+      
+      // Additional mirrors
+      for (let i = 1; i < hitPoints.length; i++) {
+        const mirror = reflectionChain[i].sourceMirror;
+        const normal = mirrorNormal(mirror);
+        
+        // Calculate the virtual image of the previous hit point through this mirror
+        const prevPoint = hitPoints[i-1];
+        const prevToMirrorX = prevPoint.x - mirror.x1;
+        const prevToMirrorY = prevPoint.y - mirror.y1;
+        const dotProduct = prevToMirrorX * normal.x + prevToMirrorY * normal.y;
+        
+        const virtualImage = {
+          x: prevPoint.x - 2 * dotProduct * normal.x,
+          y: prevPoint.y - 2 * dotProduct * normal.y
+        };
+        
+        virtualPaths.push([
+          { x: hitPoints[i].x, y: hitPoints[i].y, type: 'solid' },
+          { x: virtualImage.x, y: virtualImage.y, type: 'dashed' }
+        ]);
+      }
     }
   }
   
-  return { physical: physicalPath, virtual: virtualPath };
+  return { physical: physicalPath, virtuals: virtualPaths };
+}
+
+// Helper function to create a point on a mirror at given t (0-1)
+function createPointOnMirror(mirror, t) {
+  return {
+    x: mirror.x1 + t * (mirror.x2 - mirror.x1),
+    y: mirror.y1 + t * (mirror.y2 - mirror.y1)
+  };
+}
+
+// Helper function to get a mirror's normal vector
+function mirrorNormal(mirror) {
+  const mirrorVec = {
+    x: mirror.x2 - mirror.x1,
+    y: mirror.y2 - mirror.y1
+  };
+  const mirrorLength = Math.sqrt(mirrorVec.x * mirrorVec.x + mirrorVec.y * mirrorVec.y);
+  
+  return {
+    x: -mirrorVec.y / mirrorLength,
+    y: mirrorVec.x / mirrorLength
+  };
+}
+
+// Helper function to check if a point lies on a line segment
+function isPointOnLineSegment(px, py, x1, y1, x2, y2) {
+  // Calculate the distance from point to line segment
+  const lineLength = dist(x1, y1, x2, y2);
+  const d1 = dist(px, py, x1, y1);
+  const d2 = dist(px, py, x2, y2);
+  
+  // Point is on segment if the sum of distances to endpoints equals the segment length
+  // Add a small epsilon for floating point precision
+  const epsilon = 0.001;
+  return Math.abs(d1 + d2 - lineLength) < epsilon;
 }
 
 // Improved function to check if a reflection is visible from current eye position
