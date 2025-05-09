@@ -19,6 +19,9 @@ const EYE_SIZE = 40;
 const MAX_REFLECTIONS = 10; // Maximum number of reflections to prevent infinite loops
 const MIN_REFLECTION_SIZE_RATIO = 0.05; // Minimum size ratio to original ball (10%)
 
+// Will store our reflection colors once initialized
+let REFLECTION_COLORS = [];
+
 // Game objects
 let ball; 
 let mirrors = [];
@@ -304,6 +307,26 @@ function setup() {
   // Create a fixed-size canvas
   createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
   
+  // Initialize reflection colors
+  REFLECTION_COLORS = [
+    null, // 0-index (unused)
+    color(50, 200, 100),    // 1st order - Green
+    color(180, 100, 255),   // 2nd order - Purple
+    color(255, 150, 50),    // 3rd order - Orange
+    color(0, 200, 200),     // 4th order - Teal
+    color(255, 100, 255),   // 5th order - Pink
+    color(100, 150, 255),   // 6th order - Light Blue
+    color(255, 200, 0),     // 7th order - Gold
+    color(150, 75, 0),      // 8th order - Brown
+    color(255, 0, 100),     // 9th order - Hot Pink
+    color(0, 255, 150),     // 10th order - Mint
+    color(150, 0, 255),     // 11th order - Deep Purple
+    color(255, 100, 0),     // 12th order - Bright Orange
+    color(0, 150, 100),     // 13th order - Sea Green
+    color(255, 0, 255),     // 14th order - Magenta
+    color(100, 200, 255)    // 15th order - Sky Blue
+  ];
+  
   // Load the eye image
   eye = loadImage('eye.svg');
   
@@ -482,29 +505,9 @@ function drawReflections() {
     // Check if this reflection is visible from current eye position
     if (!isReflectionVisible(reflection)) continue;
     
-    // Choose color based on reflection depth (order)
-    switch(reflection.depth) {
-      case 1:
-        // First-order reflections - Green
-        fill(50, 200, 100, 200);
-        break;
-      case 2:
-        // Second-order reflections - Purple
-        fill(180, 100, 255, 200);
-        break;
-      case 3:
-        // Third-order reflections - Orange
-        fill(255, 150, 50, 200);
-        break;
-      case 4:
-        // Fourth-order reflections - Teal
-        fill(0, 200, 200, 200);
-        break;
-      default:
-        // Higher orders - Red
-        fill(255, 100, 100, 200);
-        break;
-    }
+    // Get color based on reflection depth, default to the last color if beyond our defined colors
+    const colorIndex = Math.min(reflection.depth, REFLECTION_COLORS.length - 1);
+    fill(REFLECTION_COLORS[colorIndex]);
     
     ellipse(reflection.x, reflection.y, reflection.radius * 2);
   }
@@ -550,35 +553,14 @@ function drawRayPaths() {
   // Get the current reflection after potential adjustment
   const currentReflection = reflections[currentRayIndex];
   
-  // Color based on reflection depth/order
-  let strokeColor;
-  switch (currentReflection.depth) {
-      case 1:
-        // First-order paths - Green
-      strokeColor = color(50, 200, 100, 220);
-        break;
-      case 2:
-        // Second-order paths - Purple
-      strokeColor = color(180, 100, 255, 220);
-        break;
-      case 3:
-        // Third-order paths - Orange
-      strokeColor = color(255, 150, 50, 220);
-        break;
-      case 4:
-        // Fourth-order paths - Teal
-      strokeColor = color(0, 200, 200, 220);
-        break;
-      default:
-        // Higher orders - Red
-      strokeColor = color(255, 100, 100, 220);
-        break;
-    }
-    
+  // Get color based on reflection depth, default to the last color if beyond our defined colors
+  const colorIndex = Math.min(currentReflection.depth, REFLECTION_COLORS.length - 1);
+  let strokeColor = REFLECTION_COLORS[colorIndex];
+  
   // Prepare stroke settings
   stroke(strokeColor);
   strokeWeight(3);
-    noFill();
+  noFill();
   
   // SPECIAL CASE: First-order reflection (single mirror)
   if (currentReflection.depth === 1) {
