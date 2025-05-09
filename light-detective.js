@@ -668,7 +668,7 @@ function traceSingleRayPath(reflection) {
     // 1. Get the mirror
     const mirror = reflection.sourceMirror;
     
-    // 2. Get the normal vector to the mirror
+    // 2. Calculate the mirror normal vector
     const mirrorVec = {
       x: mirror.x2 - mirror.x1,
       y: mirror.y2 - mirror.y1
@@ -679,38 +679,70 @@ function traceSingleRayPath(reflection) {
       y: mirrorVec.x / mirrorLength
     };
     
-    // 3. Calculate the virtual image by reflecting the ball across the mirror
+    // 3. Calculate the virtual image of the ball across the mirror
     const ballToMirrorX = ball.x - mirror.x1;
     const ballToMirrorY = ball.y - mirror.y1;
     const ballDotProduct = ballToMirrorX * normal.x + ballToMirrorY * normal.y;
     
-    const virtualImage = {
+    const virtualBall = {
       x: ball.x - 2 * ballDotProduct * normal.x,
       y: ball.y - 2 * ballDotProduct * normal.y
     };
     
-    // 4. Find where the line from eye to virtual image intersects the mirror
-    // This is the reflection point where the light actually bounces
+    // 4. Find where the line from eye to virtual ball intersects the mirror
+    // This is the exact reflection point that obeys the law of reflection
     const hitPoint = lineIntersection(
       eyePosition.x, eyePosition.y,
-      virtualImage.x, virtualImage.y,
+      virtualBall.x, virtualBall.y,
       mirror.x1, mirror.y1,
       mirror.x2, mirror.y2
     );
     
     if (hitPoint) {
+      // Debug: Verify that angle of incidence equals angle of reflection
+      const incidentVector = {
+        x: hitPoint.x - ball.x,
+        y: hitPoint.y - ball.y
+      };
+      const reflectedVector = {
+        x: eyePosition.x - hitPoint.x,
+        y: eyePosition.y - hitPoint.y
+      };
+      
+      // Normalize vectors
+      const incidentLength = Math.sqrt(incidentVector.x * incidentVector.x + incidentVector.y * incidentVector.y);
+      const reflectedLength = Math.sqrt(reflectedVector.x * reflectedVector.x + reflectedVector.y * reflectedVector.y);
+      
+      const normalizedIncident = {
+        x: incidentVector.x / incidentLength,
+        y: incidentVector.y / incidentLength
+      };
+      
+      const normalizedReflected = {
+        x: reflectedVector.x / reflectedLength,
+        y: reflectedVector.y / reflectedLength
+      };
+      
+      // Dot products with normal
+      const incidentDot = normalizedIncident.x * normal.x + normalizedIncident.y * normal.y;
+      const reflectedDot = normalizedReflected.x * normal.x + normalizedReflected.y * normal.y;
+      
+      console.log("Incident dot:", incidentDot);
+      console.log("Reflected dot:", reflectedDot);
+      console.log("Angle difference:", Math.abs(incidentDot + reflectedDot));
+      
       // 5. Construct the physical path: ball → hit point → eye
       physicalPath.push({ x: ball.x, y: ball.y, type: 'solid' });
       physicalPath.push({ x: hitPoint.x, y: hitPoint.y, type: 'solid' });
       physicalPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
       
-      // 6. Construct the virtual path: eye → hit point → virtual image (dashed)
+      // 6. Construct the virtual path: eye → hit point → virtual ball (dashed)
       virtualPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
       virtualPath.push({ x: hitPoint.x, y: hitPoint.y, type: 'solid' });
-      virtualPath.push({ x: virtualImage.x, y: virtualImage.y, type: 'dashed' });
+      virtualPath.push({ x: virtualBall.x, y: virtualBall.y, type: 'dashed' });
     }
   }
-  // For higher-order reflections, we need to trace through multiple mirrors
+  // For higher-order reflections, we first calculate the final virtual image
   else {
     // Get the chain of reflections
     let reflectionChain = [];
@@ -725,19 +757,13 @@ function traceSingleRayPath(reflection) {
     // Reverse the chain to go from original ball to eye
     reflectionChain.reverse();
     
-    // Start with the ball
-    const originalSource = { x: ball.x, y: ball.y };
-    physicalPath.push({ x: originalSource.x, y: originalSource.y, type: 'solid' });
+    // Calculate the final virtual image by reflecting the ball through all mirrors in sequence
+    let virtualObject = { x: ball.x, y: ball.y };
     
-    // Calculate the virtual image of the original source through all mirrors in sequence
-    let virtualSource = { x: originalSource.x, y: originalSource.y };
-    let bouncePoints = [];
-    
-    // For each reflection, calculate the virtual image through that mirror
     for (let i = 0; i < reflectionChain.length; i++) {
       const mirror = reflectionChain[i].sourceMirror;
       
-      // Get normal vector to the mirror
+      // Calculate normal to this mirror
       const mirrorVec = {
         x: mirror.x2 - mirror.x1,
         y: mirror.y2 - mirror.y1
@@ -748,96 +774,89 @@ function traceSingleRayPath(reflection) {
         y: mirrorVec.x / mirrorLength
       };
       
-      // Calculate the next virtual source by reflecting the current virtual source
-      const sourceToMirrorX = virtualSource.x - mirror.x1;
-      const sourceToMirrorY = virtualSource.y - mirror.y1;
-      const sourceDotProduct = sourceToMirrorX * normal.x + sourceToMirrorY * normal.y;
+      // Reflect the virtual object across this mirror
+      const objToMirrorX = virtualObject.x - mirror.x1;
+      const objToMirrorY = virtualObject.y - mirror.y1;
+      const dotProduct = objToMirrorX * normal.x + objToMirrorY * normal.y;
       
-      virtualSource = {
-        x: virtualSource.x - 2 * sourceDotProduct * normal.x,
-        y: virtualSource.y - 2 * sourceDotProduct * normal.y
+      virtualObject = {
+        x: virtualObject.x - 2 * dotProduct * normal.x,
+        y: virtualObject.y - 2 * dotProduct * normal.y
       };
+    }
+    
+    // Now we have the final virtual image, trace backwards to find all physical bounce points
+    let hitPoints = [];
+    let lastPoint = null;
+    
+    // Start from the eye looking at the final virtual image
+    // and find where this line intersects the last mirror
+    const lastMirror = reflectionChain[reflectionChain.length - 1].sourceMirror;
+    
+    const firstHitPoint = lineIntersection(
+      eyePosition.x, eyePosition.y,
+      virtualObject.x, virtualObject.y,
+      lastMirror.x1, lastMirror.y1,
+      lastMirror.x2, lastMirror.y2
+    );
+    
+    if (firstHitPoint) {
+      hitPoints.unshift(firstHitPoint);
+      lastPoint = firstHitPoint;
       
-      // For the last mirror, this is our final virtual image
-      if (i === reflectionChain.length - 1) {
-        // For the last mirror, find the intersection with the line from eye to virtualSource
+      // Work backwards through the reflection chain
+      for (let i = reflectionChain.length - 2; i >= 0; i--) {
+        const mirror = reflectionChain[i].sourceMirror;
+        
+        // Calculate the normal to this mirror
+        const mirrorVec = {
+          x: mirror.x2 - mirror.x1,
+          y: mirror.y2 - mirror.y1
+        };
+        const mirrorLength = Math.sqrt(mirrorVec.x * mirrorVec.x + mirrorVec.y * mirrorVec.y);
+        const normal = {
+          x: -mirrorVec.y / mirrorLength,
+          y: mirrorVec.x / mirrorLength
+        };
+        
+        // Reflect the last hit point across the next mirror
+        const lastToMirrorX = lastPoint.x - mirror.x1;
+        const lastToMirrorY = lastPoint.y - mirror.y1;
+        const dotProduct = lastToMirrorX * normal.x + lastToMirrorY * normal.y;
+        
+        const reflectedLast = {
+          x: lastPoint.x - 2 * dotProduct * normal.x,
+          y: lastPoint.y - 2 * dotProduct * normal.y
+        };
+        
+        // Find where the line from ball to reflectedLast intersects the current mirror
         const hitPoint = lineIntersection(
-          eyePosition.x, eyePosition.y,
-          virtualSource.x, virtualSource.y,
+          ball.x, ball.y,
+          reflectedLast.x, reflectedLast.y,
           mirror.x1, mirror.y1,
           mirror.x2, mirror.y2
         );
         
         if (hitPoint) {
-          bouncePoints.push(hitPoint);
+          hitPoints.unshift(hitPoint);
+          lastPoint = hitPoint;
         }
       }
-      // For intermediate mirrors, find intersection with the next mirror
-      else {
-        const nextMirror = reflectionChain[i+1].sourceMirror;
-        
-        // We need to find where a ray from the previous bounce point (or original source)
-        // would hit this mirror such that it continues to the next mirror
-        
-        let prevPoint;
-        if (bouncePoints.length === 0) {
-          prevPoint = originalSource;
-        } else {
-          prevPoint = bouncePoints[bouncePoints.length - 1];
-        }
-        
-        // Find the point on this mirror where angle of incidence = angle of reflection
-        // when going from prevPoint to nextMirror
-        
-        // Use the next mirror's midpoint as a target for visualization
-        const nextMirrorMidpoint = {
-          x: (nextMirror.x1 + nextMirror.x2) / 2,
-          y: (nextMirror.y1 + nextMirror.y2) / 2
-        };
-        
-        // Reflect the next mirror midpoint across the current mirror
-        const midpointToMirrorX = nextMirrorMidpoint.x - mirror.x1;
-        const midpointToMirrorY = nextMirrorMidpoint.y - mirror.y1;
-        const midpointDotProduct = midpointToMirrorX * normal.x + midpointToMirrorY * normal.y;
-        
-        const reflectedMidpoint = {
-          x: nextMirrorMidpoint.x - 2 * midpointDotProduct * normal.x,
-          y: nextMirrorMidpoint.y - 2 * midpointDotProduct * normal.y
-        };
-        
-        // Find where the line from prevPoint to reflectedMidpoint intersects the current mirror
-        const hitPoint = lineIntersection(
-          prevPoint.x, prevPoint.y,
-          reflectedMidpoint.x, reflectedMidpoint.y,
-          mirror.x1, mirror.y1,
-          mirror.x2, mirror.y2
-        );
-        
-        if (hitPoint) {
-          bouncePoints.push(hitPoint);
-        }
-      }
-    }
-    
-    // Construct the physical path by connecting all bounce points
-    let currentPoint = originalSource;
-    
-    for (const bouncePoint of bouncePoints) {
-      physicalPath.push({ x: bouncePoint.x, y: bouncePoint.y, type: 'solid' });
-      currentPoint = bouncePoint;
-    }
-    
-    // Add the eye as the final destination
-    physicalPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
-    
-    // For the virtual path, we show the line from eye to the last bounce point,
-    // and then a dashed line to the final virtual image
-    if (bouncePoints.length > 0) {
-      const lastBouncePoint = bouncePoints[bouncePoints.length - 1];
       
+      // Construct the physical path
+      physicalPath.push({ x: ball.x, y: ball.y, type: 'solid' });
+      
+      for (const hitPoint of hitPoints) {
+        physicalPath.push({ x: hitPoint.x, y: hitPoint.y, type: 'solid' });
+      }
+      
+      // Add eye as final point
+      physicalPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
+      
+      // Construct the virtual path
       virtualPath.push({ x: eyePosition.x, y: eyePosition.y, type: 'solid' });
-      virtualPath.push({ x: lastBouncePoint.x, y: lastBouncePoint.y, type: 'solid' });
-      virtualPath.push({ x: virtualSource.x, y: virtualSource.y, type: 'dashed' });
+      virtualPath.push({ x: hitPoints[hitPoints.length - 1].x, y: hitPoints[hitPoints.length - 1].y, type: 'solid' });
+      virtualPath.push({ x: virtualObject.x, y: virtualObject.y, type: 'dashed' });
     }
   }
   
@@ -1028,7 +1047,7 @@ function isReflectionVisible(reflection) {
   return true;
 }
 
-// Modified higher-order reflection calculation to check canvas bounds
+// Modified higher-order reflection calculation with better sizing
 function calculateHigherOrderReflection(mirror, object, objectRadius, depth, allMirrors) {
   // Don't go beyond max reflection depth
   if (depth > MAX_REFLECTIONS) return;
@@ -1053,10 +1072,19 @@ function calculateHigherOrderReflection(mirror, object, objectRadius, depth, all
   // Calculate distance from object to mirror
   const distToMirror = Math.abs(normalDistance);
   
-  // Calculate reflection size based on distance to mirror
-  // Further away = smaller reflection
-  const distanceFactor = 1 / (1 + distToMirror * 0.005);
-  const reflectionRadius = objectRadius * distanceFactor;
+  // Calculate reflection size:
+  // For each order of reflection, reduce size by a modest fixed percentage
+  let reflectionRadius;
+  
+  // Size reduction factors by reflection depth:
+  // depth 1 = 100% (original size)
+  // depth 2 = 85% of original
+  // depth 3 = 70% of original
+  // depth 4+ = 60% of original
+  const sizeFactors = [1, 0.85, 0.7, 0.6, 0.6, 0.6];
+  const sizeFactor = sizeFactors[Math.min(depth - 1, sizeFactors.length - 1)];
+  
+  reflectionRadius = BALL_RADIUS * sizeFactor;
   
   // Don't show reflections that would be too small
   if (reflectionRadius < BALL_RADIUS * MIN_REFLECTION_SIZE_RATIO) return;
@@ -1089,7 +1117,7 @@ function calculateHigherOrderReflection(mirror, object, objectRadius, depth, all
       // Skip the mirror that created this reflection
       if (otherMirror === mirror) continue;
       
-      calculateHigherOrderReflection(otherMirror, virtualObject, virtualObject.radius, depth + 1, allMirrors);
+      calculateHigherOrderReflection(otherMirror, virtualObject, reflectionRadius, depth + 1, allMirrors);
     }
   }
 }
@@ -1118,13 +1146,8 @@ function calculateReflections() {
     // Calculate distance from ball to mirror
     const distToMirror = Math.abs(normalDistance);
     
-    // Calculate reflection size based on distance to mirror
-    // Further away = smaller reflection
-    const distanceFactor = 1 / (1 + distToMirror * 0.005);
-    const reflectionRadius = ball.radius * distanceFactor;
-    
-    // Don't show reflections that would be too small
-    if (reflectionRadius < BALL_RADIUS * MIN_REFLECTION_SIZE_RATIO) continue;
+    // For first-order reflections, maintain the same size as the original ball
+    const reflectionRadius = ball.radius;
     
     // Reflection of ball position is on opposite side of mirror, same distance from mirror
     const virtualBall = {
